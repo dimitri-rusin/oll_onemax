@@ -1,3 +1,5 @@
+from stable_baselines3 import PPO
+from stable_baselines3.common.env_checker import check_env
 import gymnasium
 import numpy
 
@@ -32,9 +34,8 @@ class OLL_OneMax(gymnasium.Env):
     normalized_distance = 1 - (hamming_distance / self.num_dimensions)
     return normalized_distance
 
-  def reset(self):
-    next_random_seed = numpy.random.randint(0, 10000)
-    super().reset(seed = next_random_seed)
+  def reset(self, seed = numpy.random.randint(0, 10000)):
+    super().reset(seed = seed)
 
     self.optimum = numpy.random.randint(0, 2, size = self.num_dimensions, dtype = numpy.int32)
     self.assignment = numpy.random.randint(0, 2, size = self.num_dimensions, dtype = numpy.int32)
@@ -44,7 +45,7 @@ class OLL_OneMax(gymnasium.Env):
 
     info = {}
 
-    return self.current_fitness, info
+    return numpy.array([self.current_fitness]), info
 
   def step(self, lamda_minus_one):
     lambda_ = lamda_minus_one + 1
@@ -74,13 +75,13 @@ class OLL_OneMax(gymnasium.Env):
         self.assignment = best_offspring_assignment
         self.current_fitness = best_offspring_fitness
 
-    terminated = self.current_fitness == 1
+    terminated = bool(self.current_fitness == 1)
     reward = self.current_fitness - previous_fitness
     info = {}
 
     self.render()
 
-    return self.current_fitness, reward, terminated, False, info
+    return numpy.array([self.current_fitness]), reward, terminated, False, info
 
   def render(self):
 
@@ -104,11 +105,19 @@ if __name__ == '__main__':
     print('Sample', '|', 'Fitness', file = traces_file, sep = '')
 
     env = OLL_OneMax(traces_file, random_seed = 12)
+
+    check_env(env)
+
+    # Instantiate the agent
+    model = PPO("MlpPolicy", env, verbose=1)
+
+    # Train the agent
+    model.learn(total_timesteps=10_000)
+
     observation, info = env.reset()
     print(env.optimum)
-
-    for _ in range(1000):
-      action = env.action_space.sample()
+    for _ in range(1_000):
+      action, _states = model.predict(observation, deterministic = True)
       observation, reward, terminated, truncated, info = env.step(action)
 
       if terminated or truncated:
