@@ -1,9 +1,6 @@
 import gymnasium
 import numpy
 
-
-# Only create one instance of this,
-# otherwise the numpy random number generator might get messed up.
 class OLL_OneMax(gymnasium.Env):
 
   def __init__(
@@ -15,15 +12,11 @@ class OLL_OneMax(gymnasium.Env):
   ):
     numpy.random.seed(random_seed)
 
+    self.optimum = None
+    self.assignment = None
+    self.current_fitness = None
     self.file = file
-
     self.num_dimensions = num_dimensions
-    self.optimum = numpy.random.randint(0, 2, size = self.num_dimensions, dtype = numpy.int32)
-
-    # The assignment is hidden,
-    # because we only the previous fitness, the previous lambda, and the current fitness.
-    self.assignment = numpy.random.randint(0, 2, size = self.num_dimensions, dtype = numpy.int32)
-    self.current_fitness = self.onemax(self.assignment)
 
     self.observation_space = gymnasium.spaces.Box(
       low = 0,
@@ -42,6 +35,10 @@ class OLL_OneMax(gymnasium.Env):
   def reset(self):
     next_random_seed = numpy.random.randint(0, 10000)
     super().reset(seed = next_random_seed)
+
+    self.optimum = numpy.random.randint(0, 2, size = self.num_dimensions, dtype = numpy.int32)
+    self.assignment = numpy.random.randint(0, 2, size = self.num_dimensions, dtype = numpy.int32)
+    self.current_fitness = self.onemax(self.assignment)
 
     self.render()
 
@@ -100,14 +97,15 @@ class OLL_OneMax(gymnasium.Env):
 
 
 
-if __name__ == '__main__':
 
+
+if __name__ == '__main__':
   with open('trace.csv', 'w') as traces_file:
-    print('Sample', '|', 'Fitness', file=traces_file, sep='')
+    print('Sample', '|', 'Fitness', file = traces_file, sep = '')
 
     env = OLL_OneMax(traces_file, random_seed = 42)
-    print(env.optimum)
     observation, info = env.reset()
+    print(env.optimum)
 
     for _ in range(1000):
       action = env.action_space.sample()
