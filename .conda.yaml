@@ -3,6 +3,7 @@ dependencies:
   - pip=23.3
   - pip:
     - colored==2.2.3
+    - gymnasium==0.29.1
     - jupyter==1.0.0
-    - gymnasium
-    - numpy
+    - numpy==1.26.2
+    - stable-baselines3[extra]==2.2.1
