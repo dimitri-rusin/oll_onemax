@@ -4,3 +4,5 @@ dependencies:
   - pip:
     - colored==2.2.3
     - jupyter==1.0.0
+    - gymnasium
+    - numpy
