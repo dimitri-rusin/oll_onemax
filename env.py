@@ -6,7 +6,7 @@ class OLL_OneMax(gymnasium.Env):
   def __init__(
     self,
     file = None,
-    num_dimensions = 5,
+    num_dimensions = 50,
     optimum = None,
     random_seed = None,
   ):
@@ -85,7 +85,7 @@ class OLL_OneMax(gymnasium.Env):
   def render(self):
 
     print(
-      self.assignment,
+      ''.join(str(bit) for bit in self.assignment),
       '|',
       self.current_fitness,
       file = self.file,
@@ -103,7 +103,7 @@ if __name__ == '__main__':
   with open('trace.csv', 'w') as traces_file:
     print('Sample', '|', 'Fitness', file = traces_file, sep = '')
 
-    env = OLL_OneMax(traces_file, random_seed = 42)
+    env = OLL_OneMax(traces_file, random_seed = 12)
     observation, info = env.reset()
     print(env.optimum)
 
