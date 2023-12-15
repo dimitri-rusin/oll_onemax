@@ -38,7 +38,7 @@ class OLL_OneMax(gymnasium.Env):
     super().reset(seed = seed)
 
     self.optimum = numpy.random.randint(0, 2, size = self.num_dimensions, dtype = numpy.int32)
-    self.assignment = numpy.random.randint(0, 2, size = self.num_dimensions, dtype = numpy.int32)
+    self.assignment = numpy.zeros(shape = (self.num_dimensions,), dtype = numpy.int32)
     self.current_fitness = self.onemax(self.assignment)
 
     self.render()
@@ -76,7 +76,7 @@ class OLL_OneMax(gymnasium.Env):
         self.current_fitness = best_offspring_fitness
 
     terminated = bool(self.current_fitness == 1)
-    reward = self.current_fitness - previous_fitness
+    reward = -1
     info = {}
 
     self.render()
@@ -99,6 +99,19 @@ class OLL_OneMax(gymnasium.Env):
 
 
 
+def evaluate_model(env, model, num_episodes=50):
+  total_reward = 0
+  for episode in range(num_episodes):
+    observation, _ = env.reset()
+    terminated = False
+    while not terminated:
+      action, _ = model.predict(observation, deterministic = True)
+      observation, reward, terminated, _, _ = env.step(action)
+      total_reward += reward
+  average_reward = total_reward / num_episodes
+  return average_reward
+
+
 
 if __name__ == '__main__':
   with open('trace.csv', 'w') as traces_file:
@@ -109,15 +122,29 @@ if __name__ == '__main__':
     check_env(env)
 
     # Instantiate the agent
-    model = PPO("MlpPolicy", env, verbose=1)
+    model = PPO("MlpPolicy", env, verbose = 1)
+
+    average_reward = evaluate_model(env, model, num_episodes = 50)
+    print(f"Expected average reward across 50 episodes: {average_reward}")
+
+    for obs in [i * 0.1 for i in range(10)]:
+      action, _ = model.predict([obs], deterministic = True)
+      print(f"Map {obs} -> {action}")
 
     # Train the agent
-    model.learn(total_timesteps=10_000)
+    model.learn(total_timesteps = 10_000)
+
+    average_reward = evaluate_model(env, model, num_episodes = 50)
+    print(f"Expected average reward across 50 episodes: {average_reward}")
+
+    for obs in [i * 0.1 for i in range(10)]:
+      action, _ = model.predict([obs], deterministic = True)
+      print(f"Map {obs} -> {action}")
 
     observation, info = env.reset()
     print(env.optimum)
     for _ in range(1_000):
-      action, _states = model.predict(observation, deterministic = True)
+      action, _ = model.predict(observation, deterministic = True)
       observation, reward, terminated, truncated, info = env.step(action)
 
       if terminated or truncated:
