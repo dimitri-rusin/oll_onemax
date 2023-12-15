@@ -50,29 +50,32 @@ class OLL_OneMax(gymnasium.Env):
     return self.current_fitness, info
 
   def step(self, lamda_minus_one):
-    lamda = lamda_minus_one + 1
+    lambda_ = lamda_minus_one + 1
+    assert lambda_ >= 1
+
     previous_fitness = self.current_fitness
 
-    best_assignment_from_first_mutation = None
-    best_fitness_from_first_mutation = None
-    for _ in range(lamda):
-      assignment_from_first_mutation = self.assignment.copy()
-      dices = numpy.random.randint(0, self.num_dimensions, size = self.num_dimensions, dtype = numpy.int32)
-      assignment_from_first_mutation = numpy.where(dices == 0, 1 - assignment_from_first_mutation, assignment_from_first_mutation)
-      new_fitness = self.onemax(assignment_from_first_mutation)
-      if best_fitness_from_first_mutation is None or new_fitness >= best_fitness_from_first_mutation:
-        best_assignment_from_first_mutation = assignment_from_first_mutation
-        best_fitness_from_first_mutation = new_fitness
+    parent = self.assignment
+    for _ in range(2):
+      best_offspring_assignment = None
+      best_offspring_fitness = None
+      for _ in range(lambda_):
+        current_offspring_assignment = parent.copy()
+        mutation_chance = numpy.random.rand(self.num_dimensions) < 1 / self.num_dimensions
+        current_offspring_assignment = numpy.where(
+          mutation_chance,
+          1 - current_offspring_assignment,
+          current_offspring_assignment,
+        )
+        current_offspring_fitness = self.onemax(current_offspring_assignment)
+        if best_offspring_fitness is None or current_offspring_fitness >= best_offspring_fitness:
+          best_offspring_assignment = current_offspring_assignment
+          best_offspring_fitness = current_offspring_fitness
 
-    best_assignment_from_second_mutation = self.assignment
-    best_fitness_from_second_mutation = self.current_fitness
-
-    if self.current_fitness <= best_fitness_from_first_mutation >= best_fitness_from_second_mutation:
-      self.current_fitness = best_fitness_from_first_mutation
-      self.assignment = best_assignment_from_first_mutation
-    elif best_fitness_from_second_mutation >= self.current_fitness:
-      self.current_fitness = best_fitness_from_second_mutation
-      self.assignment = best_assignment_from_second_mutation
+      parent = best_offspring_assignment
+      if best_offspring_fitness >= self.current_fitness:
+        self.assignment = best_offspring_assignment
+        self.current_fitness = best_offspring_fitness
 
     terminated = self.current_fitness == 1
     reward = self.current_fitness - previous_fitness
@@ -102,7 +105,7 @@ if __name__ == '__main__':
   with open('trace.csv', 'w') as traces_file:
     print('Sample', '|', 'Fitness', file=traces_file, sep='')
 
-    env = OLL_OneMax(traces_file, random_seed = 43)
+    env = OLL_OneMax(traces_file, random_seed = 42)
     print(env.optimum)
     observation, info = env.reset()
 
