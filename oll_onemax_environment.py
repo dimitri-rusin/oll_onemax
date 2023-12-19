@@ -1,5 +1,3 @@
-from stable_baselines3 import PPO
-from stable_baselines3.common.env_checker import check_env
 import gymnasium
 import numpy
 
@@ -7,13 +5,9 @@ class OLL_OneMax(gymnasium.Env):
 
   def __init__(
     self,
-    file = None,
-    num_dimensions = 50,
-    optimum = None,
-    random_seed = None,
+    file,
+    num_dimensions,
   ):
-    numpy.random.seed(random_seed)
-
     self.optimum = None
     self.assignment = None
     self.current_fitness = None
@@ -34,15 +28,13 @@ class OLL_OneMax(gymnasium.Env):
     normalized_distance = 1 - (hamming_distance / self.num_dimensions)
     return normalized_distance
 
-  def reset(self, seed = numpy.random.randint(0, 10000)):
+  def reset(self, seed = numpy.random.randint(0, 10_000)):
     super().reset(seed = seed)
 
     self.optimum = numpy.random.randint(0, 2, size = self.num_dimensions, dtype = numpy.int32)
     self.assignment = numpy.zeros(shape = (self.num_dimensions,), dtype = numpy.int32)
     self.current_fitness = self.onemax(self.assignment)
-
     self.render()
-
     info = {}
 
     return self.assignment, info
@@ -78,11 +70,11 @@ class OLL_OneMax(gymnasium.Env):
     terminated = bool(self.current_fitness == 1)
     reward = -1
     info = {}
-
     self.render()
 
     return self.assignment, reward, terminated, False, info
 
+  # Just log the behaviour to a file.
   def render(self):
 
     print(
@@ -99,55 +91,31 @@ class OLL_OneMax(gymnasium.Env):
 
 
 
-def evaluate_model(env, model, num_episodes=50):
+
+
+
+def evaluate_random_behaviour(environment, num_episodes = 50):
   total_reward = 0
   for episode in range(num_episodes):
-    observation, _ = env.reset()
+    observation, _ = environment.reset()
     terminated = False
     while not terminated:
-      action, _ = model.predict(observation, deterministic = True)
-      observation, reward, terminated, _, _ = env.step(action)
+      random_action = environment.action_space.sample()
+      observation, reward, terminated, _, _ = environment.step(random_action)
       total_reward += reward
   average_reward = total_reward / num_episodes
   return average_reward
 
-
-
 if __name__ == '__main__':
-  with open('trace.csv', 'w') as traces_file:
+  random_seed = 12
+  numpy.random.seed(random_seed)
+
+  with open('traces.csv', 'w') as traces_file:
     print('Sample', '|', 'Fitness', file = traces_file, sep = '')
-
-    env = OLL_OneMax(traces_file, random_seed = 12)
-
-    check_env(env)
-
-    # Instantiate the agent
-    model = PPO("MlpPolicy", env, verbose = 1)
-
-    average_reward = evaluate_model(env, model, num_episodes = 50)
+    environment = OLL_OneMax(
+      file = traces_file,
+      num_dimensions = 100
+    )
+    average_reward = evaluate_random_behaviour(environment)
     print(f"Expected average reward across 50 episodes: {average_reward}")
-
-    for obs in [i * 0.1 for i in range(10)]:
-      action, _ = model.predict(numpy.random.randint(0, 2, size = env.num_dimensions, dtype = numpy.int32), deterministic = True)
-      print(f"Map {obs} -> {action}")
-
-    # Train the agent
-    model.learn(total_timesteps = 10_000)
-
-    average_reward = evaluate_model(env, model, num_episodes = 50)
-    print(f"Expected average reward across 50 episodes: {average_reward}")
-
-    for obs in [i * 0.1 for i in range(10)]:
-      action, _ = model.predict(numpy.random.randint(0, 2, size = env.num_dimensions, dtype = numpy.int32), deterministic = True)
-      print(f"Map {obs} -> {action}")
-
-    observation, info = env.reset()
-    print(env.optimum)
-    for _ in range(1_000):
-      action, _ = model.predict(observation, deterministic = True)
-      observation, reward, terminated, truncated, info = env.step(action)
-
-      if terminated or truncated:
-        break
-
-    env.close()
+    environment.close()
