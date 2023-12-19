@@ -23,11 +23,11 @@ class OLL_OneMax(gymnasium.Env):
     self.observation_space = gymnasium.spaces.Box(
       low = 0,
       high = 1,
-      shape = (1,),
-      dtype = numpy.float64,
+      shape = (self.num_dimensions,),
+      dtype = numpy.int32,
     )
 
-    self.action_space = gymnasium.spaces.Discrete(self.num_dimensions)
+    self.action_space = gymnasium.spaces.Discrete(self.num_dimensions * 8)
 
   def onemax(self, assignment):
     hamming_distance = numpy.sum(self.optimum != assignment, dtype = numpy.float64)
@@ -45,7 +45,7 @@ class OLL_OneMax(gymnasium.Env):
 
     info = {}
 
-    return numpy.array([self.current_fitness]), info
+    return self.assignment, info
 
   def step(self, lamda_minus_one):
     lambda_ = lamda_minus_one + 1
@@ -81,7 +81,7 @@ class OLL_OneMax(gymnasium.Env):
 
     self.render()
 
-    return numpy.array([self.current_fitness]), reward, terminated, False, info
+    return self.assignment, reward, terminated, False, info
 
   def render(self):
 
@@ -128,7 +128,7 @@ if __name__ == '__main__':
     print(f"Expected average reward across 50 episodes: {average_reward}")
 
     for obs in [i * 0.1 for i in range(10)]:
-      action, _ = model.predict([obs], deterministic = True)
+      action, _ = model.predict(numpy.random.randint(0, 2, size = env.num_dimensions, dtype = numpy.int32), deterministic = True)
       print(f"Map {obs} -> {action}")
 
     # Train the agent
@@ -138,7 +138,7 @@ if __name__ == '__main__':
     print(f"Expected average reward across 50 episodes: {average_reward}")
 
     for obs in [i * 0.1 for i in range(10)]:
-      action, _ = model.predict([obs], deterministic = True)
+      action, _ = model.predict(numpy.random.randint(0, 2, size = env.num_dimensions, dtype = numpy.int32), deterministic = True)
       print(f"Map {obs} -> {action}")
 
     observation, info = env.reset()
