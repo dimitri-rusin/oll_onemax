@@ -8,16 +8,21 @@ class OLL_OneMax(gymnasium.Env):
     file,
     num_dimensions,
   ):
-    self.optimum = None
+
+    self.lambdas = []
+    self.assignments = []
+    self.fitnesses = []
+
     self.assignment = None
     self.current_fitness = None
     self.file = file
     self.num_dimensions = num_dimensions
+    self.optimum = None
 
     self.observation_space = gymnasium.spaces.Box(
       low = 0,
       high = 1,
-      shape = (self.num_dimensions,),
+      shape = (1,),
       dtype = numpy.int32,
     )
 
@@ -25,8 +30,8 @@ class OLL_OneMax(gymnasium.Env):
 
   def onemax(self, assignment):
     hamming_distance = numpy.sum(self.optimum != assignment, dtype = numpy.float64)
-    normalized_distance = 1 - (hamming_distance / self.num_dimensions)
-    return normalized_distance
+    relative_similarity = 1 - (hamming_distance / self.num_dimensions)
+    return relative_similarity
 
   def reset(self, seed = numpy.random.randint(0, 10_000)):
     super().reset(seed = seed)
@@ -34,16 +39,17 @@ class OLL_OneMax(gymnasium.Env):
     self.optimum = numpy.random.randint(0, 2, size = self.num_dimensions, dtype = numpy.int32)
     self.assignment = numpy.zeros(shape = (self.num_dimensions,), dtype = numpy.int32)
     self.current_fitness = self.onemax(self.assignment)
-    self.render()
     info = {}
 
     return self.assignment, info
 
-  def step(self, lamda_minus_one):
-    lambda_ = lamda_minus_one + 1
+  def step(self, lambda_minus_one):
+    lambda_ = lambda_minus_one + 1
     assert lambda_ >= 1
 
-    previous_fitness = self.current_fitness
+    self.assignments.append(self.assignment)
+    self.fitnesses.append(self.current_fitness)
+    self.lambdas.append(lambda_)
 
     parent = self.assignment
     for _ in range(2):
@@ -68,22 +74,29 @@ class OLL_OneMax(gymnasium.Env):
         self.current_fitness = best_offspring_fitness
 
     terminated = bool(self.current_fitness == 1)
-    reward = -1
+    reward = -1 * 2 * lambda_
     info = {}
-    self.render()
+    if terminated:
+      self.render()
 
-    return self.assignment, reward, terminated, False, info
+    return self.current_fitness, reward, terminated, False, info
 
   # Just log the behaviour to a file.
   def render(self):
 
-    print(
-      ''.join(str(bit) for bit in self.assignment),
-      '|',
-      self.current_fitness,
-      file = self.file,
-      sep = ''
-    )
+    for index, (assignment, fitness, lambda_) in enumerate(zip(self.assignments, self.fitnesses, self.lambdas)):
+      num_function_evaluations = sum(self.lambdas[index:]) * 2
+      print(
+        ''.join(str(bit) for bit in assignment),
+        '|',
+        fitness,
+        '|',
+        lambda_,
+        '|',
+        num_function_evaluations,
+        file = self.file,
+        sep = ''
+      )
 
   def close(self):
    pass
@@ -100,8 +113,9 @@ def evaluate_random_behaviour(environment, num_episodes = 50):
     observation, _ = environment.reset()
     terminated = False
     while not terminated:
-      random_action = environment.action_space.sample()
-      observation, reward, terminated, _, _ = environment.step(random_action)
+      theoretical_lambda = numpy.sqrt(1. / (1. - environment.current_fitness))
+      theoretical_lambda = round(theoretical_lambda)
+      observation, reward, terminated, _, _ = environment.step(theoretical_lambda - 1)
       total_reward += reward
   average_reward = total_reward / num_episodes
   return average_reward
@@ -111,10 +125,10 @@ if __name__ == '__main__':
   numpy.random.seed(random_seed)
 
   with open('traces.csv', 'w') as traces_file:
-    print('Sample', '|', 'Fitness', file = traces_file, sep = '')
+    print('Sample', '|', 'Fitness', '|', 'Lambda', '|', 'Budget', file = traces_file, sep = '')
     environment = OLL_OneMax(
       file = traces_file,
-      num_dimensions = 100
+      num_dimensions = 1000
     )
     average_reward = evaluate_random_behaviour(environment)
     print(f"Expected average reward across 50 episodes: {average_reward}")
