@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
 
 true
-and conda activate base
-and ipython3 oll_onemax_environment.py
+and conda activate ./.conda_environment
+and ipython3 exact.py
