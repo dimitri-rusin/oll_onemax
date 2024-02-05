@@ -1,13 +1,27 @@
 import dacbench
+import gymnasium
 import numpy
 import onell_algs
 
 class OneMaxOll(dacbench.AbstractEnv):
   def __init__(self, config):
-    super(OneMaxOll, self).__init__(config)
+
     self.n = config['num_dimensions']
 
-    self.random_number_generator = numpy.random.default_rng(config['random_seed'])
+    # Required only for AbstractEnv.
+    config["action_space"] = gymnasium.spaces.Box(low=1, high=self.n, shape=(1,), dtype=numpy.float32)
+    config["benchmark_info"] = "Simple Increment Environment"
+    config["cutoff"] = 100
+    config["instance_set"] = {'example_instance': None}
+    config["observation_space"] = gymnasium.spaces.Box(low=0, high=self.n, shape=(1,), dtype=numpy.float32)
+    config["reward_range"] = (0, 1)
+
+    super(OneMaxOll, self).__init__(config)
+
+    self.random_seed = config['random_seed']
+    self.random_number_generator = numpy.random.default_rng(self.random_seed)
+
+    # WARNING: The optimum for self.x is deterministic: it is the all-ones string.
     self.x = onell_algs.OneMax(self.n, rng = self.random_number_generator)
 
     # We evaluate the onemax function once in the OneMax constructor
@@ -18,13 +32,16 @@ class OneMaxOll(dacbench.AbstractEnv):
     self.state = 0
     return numpy.array([self.state])
 
-  def reset(self):
+  def reset(self, seed = None):
+    if seed is not None:
+      self.random_seed = seed
+      self.random_number_generator = numpy.random.default_rng(self.random_seed)
     super().reset_()
-    return self.reset_()
+    return (self.reset_(), "INFO")
 
   def step(self, lambda_):
     p = lambda_ / self.n
-    population_size = round(lambda_)
+    population_size = numpy.round(lambda_).astype(int)
     xprime, f_xprime, ne1 = self.x.mutate(p, population_size, self.random_number_generator)
 
     c = 1 / lambda_
@@ -45,7 +62,8 @@ class OneMaxOll(dacbench.AbstractEnv):
     self.num_steps += 1
 
     reward = self.x.fitness - prior_x.fitness
-    done = self.x.is_optimal()
+    terminated = self.x.is_optimal()
+    truncated = False
     info = {}
 
-    return numpy.array([self.x.fitness]), reward, done, info
+    return numpy.array([self.x.fitness]), reward, terminated, truncated, info
