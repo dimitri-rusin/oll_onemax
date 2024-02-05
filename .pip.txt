@@ -1,0 +1,12 @@
+/home/dimitri/code/DACBench
+colored==2.2.3
+gymnasium==0.29.1
+gymnasium[classic-control]==0.29.1
+jupyter==1.0.0
+numpy==1.24.2
+opencv-python
+plotly==5.18.0
+scikit-learn==1.2.2
+seaborn==0.12.2
+stable_baselines3==2.2.1
+torch==2.2.0
