@@ -5,6 +5,7 @@ import csv
 import inspectify
 import numpy
 import os
+import torch
 import tuning_environments
 
 
@@ -62,14 +63,18 @@ environment = tuning_environments.OneMaxOll(config)
 model = PPO(
   "MlpPolicy",
   environment,
-  learning_rate=0.0003,
-  policy_kwargs=dict(net_arch=dict(pi=[64, 64], vf=[64, 64])),
+  # learning_rate=0.0003,
+  # policy_kwargs=dict(net_arch=dict(pi=[64, 64], vf=[64, 64])),
   verbose=1,
   seed=config['random_seed'],
 )
 
 if not os.path.exists('ppo_data/'):
   os.makedirs('ppo_data/')
+
+
+
+
 
 # SAVE POLICY TRAINING EPISODES, TRAINED POLICY, AND TRAINING ARCHITECTURE
 with open("ppo_data/agent_architecture.json", "w") as arch_file:
@@ -95,4 +100,27 @@ policy_logger_callback = PolicyLoggerCallback(
   filename="policies.csv",
 )
 
-model.learn(total_timesteps=20_000, callback=[policy_logger_callback])
+model.learn(total_timesteps=100_000, callback=[policy_logger_callback])
+
+
+
+# Save the weights
+weights = model.policy.state_dict()
+
+# Saving the weights to a file
+torch.save(weights, "ppo_data/model_weights.pth")
+
+
+import torch
+
+# Load the model weights
+model_weights_path = 'ppo_data/model_weights.pth'
+model_weights = torch.load(model_weights_path)
+
+with open("ppo_data/model_weights.txt", "w") as weights_file:
+  # Print the layers and their corresponding weights
+  for layer_name, weights in model_weights.items():
+    print(f"Layer: {layer_name}", file = weights_file)
+    print("Weights:", file = weights_file)
+    print(weights, file = weights_file)
+    print(file = weights_file)

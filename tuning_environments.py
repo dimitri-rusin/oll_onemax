@@ -68,7 +68,7 @@ class OneMaxOll(dacbench.AbstractEnv):
     self.num_evaluations = self.num_evaluations + ne1 + ne2
     self.num_steps += 1
 
-    reward = -(ne1 + ne2) + (self.x.fitness - prior_x.fitness)
+    reward = -(ne1 + ne2) + (self.x.fitness - prior_x.fitness) + self.x.fitness * lambda_ * 100
     terminated = self.x.is_optimal()
     truncated = False
     info = {}
