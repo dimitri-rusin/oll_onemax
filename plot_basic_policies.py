@@ -2,11 +2,13 @@ import environment
 import numpy
 import plotly.graph_objects
 
-numpy.random.seed(42)
-
-num_dimensions = 100
+num_dimensions = 10
 num_repetitions = 10
-random_seeds = numpy.random.randint(2**32, size = num_repetitions)
+main_random_seed = 42
+num_side_random_seeds = 2**32
+
+numpy.random.seed(main_random_seed)
+side_random_seeds = numpy.random.randint(num_side_random_seeds, size = num_repetitions)
 
 policies = {
   'theory_lambdas': {
@@ -30,10 +32,10 @@ policies = {
 keys = ['theory_lambdas', 'all_one_lambdas', 'all_n_lambdas', 'all_n_half_lambdas']
 
 for key in keys:
-  for random_seed in random_seeds:
+  for side_random_seed in side_random_seeds:
     env = environment.OneMaxOll({
       "num_dimensions": num_dimensions,
-      "random_seed": random_seed,
+      "random_seed": side_random_seed,
     })
     observation = env.reset()
     terminated = False
