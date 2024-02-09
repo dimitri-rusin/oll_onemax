@@ -117,12 +117,12 @@ class OneMaxOll(dacbench.AbstractEnv):
       low = int(self.config['observation_space'].low[0])
       high = int(self.config['observation_space'].high[0])
       fitnesses = numpy.arange(low, high).reshape(-1, 1)
-      lambdas, _ = self.agent.predict(fitnesses, deterministic = True)
-      lambdas_1d = lambdas.flatten().tolist()
-      lambdas_1d = [self.num_policies] + lambdas_1d
-      with open('ppo_data/policies.csv', 'a', newline = '') as file:
-        writer = csv.writer(file, delimiter = '|')
-        writer.writerow(lambdas_1d)
+      # lambdas, _ = self.agent.predict(fitnesses, deterministic = True)
+      # lambdas_1d = lambdas.flatten().tolist()
+      # lambdas_1d = [self.num_policies] + lambdas_1d
+      # with open('ppo_data/policies.csv', 'a', newline = '') as file:
+      #   writer = csv.writer(file, delimiter = '|')
+      #   writer.writerow(lambdas_1d)
 
     # ======================================================================================
 

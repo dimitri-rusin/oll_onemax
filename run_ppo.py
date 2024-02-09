@@ -3,6 +3,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 import csv
 import inspectify
 import numpy
+import numpy as np
 import os
 import sys
 import torch
@@ -18,45 +19,56 @@ except FileNotFoundError:
   print("Error: '.env.yaml' does not exist.", file = sys.stderr)
   os._exit(1)
 
-environment = tuning_environments.OneMaxOll(config)
-agent = PPO(
-  "MlpPolicy",
-  environment,
-  verbose=1,
-  seed=config['random_seed'],
-)
-
-environment.set_agent(agent)
-
 if not os.path.exists('ppo_data/'):
   os.makedirs('ppo_data/')
 
-# SAVE POLICY TRAINING EPISODES, TRAINED POLICY, AND TRAINING ARCHITECTURE
-with open("ppo_data/agent_architecture.json", "w") as arch_file:
-  print(agent.policy, file = arch_file)
-low = int(environment.observation_space.low[0])
-high = int(environment.observation_space.high[0])
-fitnesses = numpy.arange(low, high).reshape(-1, 1)
-fitnesses_1d = fitnesses.flatten().tolist()
-fitnesses_1d = [f'Fitness={fitness}' for fitness in fitnesses_1d]
-fitnesses_1d = ['ID'] + fitnesses_1d
-with open('ppo_data/policies.csv', 'w', newline='') as file:
-  writer = csv.writer(file, delimiter='|')
-  writer.writerow(fitnesses_1d)
+environment = tuning_environments.OneMaxOll(config)
 
-agent.learn(
-  total_timesteps = config['total_timesteps'],
-)
+import numpy as np
 
-weights = agent.policy.state_dict()
-torch.save(weights, "ppo_data/model_weights.pth")
+class TabularSARSAAgent:
+  def __init__(self, num_states=10, num_actions=10, alpha=0.1, gamma=0.99, epsilon=0.1):
+    self.Q = np.zeros((num_states, num_actions))
+    self.alpha = alpha
+    self.gamma = gamma
+    self.epsilon = epsilon
+    self.num_actions = num_actions
 
-model_weights_path = 'ppo_data/model_weights.pth'
-model_weights = torch.load(model_weights_path)
+  def discretize_action(self, continuous_action):
+    """ Discretize the continuous action space. """
+    return int((continuous_action - 1) / (10 - 1) * (self.num_actions - 1))
 
-with open("ppo_data/model_weights.txt", "w") as weights_file:
-  for layer_name, weights in model_weights.items():
-    print(f"Layer: {layer_name}", file = weights_file)
-    print("Weights:", file = weights_file)
-    print(weights, file = weights_file)
-    print(file = weights_file)
+  def choose_action(self, state):
+    """ Choose action based on ε-greedy policy. """
+    if np.random.rand() < self.epsilon:
+      return np.random.choice(self.num_actions)
+    else:
+      return np.argmax(self.Q[state])
+
+  def update(self, state, action, reward, next_state, next_action):
+    """ Update the Q-table using the SARSA update rule. """
+    predict = self.Q[state, action]
+    target = reward + self.gamma * self.Q[next_state, next_action]
+    self.Q[state, action] += self.alpha * (target - predict)
+
+def train_sarsa(env, agent, num_episodes):
+  """ Training loop for the SARSA agent. """
+  for episode in range(num_episodes):
+    state = env.reset()
+    action = agent.choose_action(state)
+
+    while True:
+      next_state, reward, done, _ = env.step(agent.discretize_action(action))
+      next_action = agent.choose_action(next_state)
+
+      agent.update(state, action, reward, next_state, next_action)
+
+      state = next_state
+      action = next_action
+
+      if done:
+        break
+
+# Usage
+agent = TabularSARSAAgent()
+train_sarsa(environment, agent, num_episodes=1000)
