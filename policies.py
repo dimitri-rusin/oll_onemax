@@ -1,10 +1,16 @@
 import gymnasium
+import multiprocessing
+
 import numpy
 import os
 import sqlite3
 import sys
 import tuning_environments
 import yaml
+
+config = None
+
+
 
 def init_q_table(n):
   """Initialize a Q-table with zeros."""
@@ -50,9 +56,11 @@ def create_tables(conn):
     ''')
 
 def save_policy(conn, q_table, episode):
-  """Save the policy induced by the Q-table."""
+  """Save the policy induced by the Q-table and launch a process for evaluation."""
   policy_id = insert_policy_and_get_id(conn, numpy.argmax(q_table, axis=1))
   insert_policy_info(conn, policy_id, episode)
+  process = multiprocessing.Process(target=evaluate_policy, args=(policy_id, config['db_path']))
+  process.start()
 
 def insert_policy_and_get_id(conn, policy):
   """Insert policy into policy_log and return the generated policy_id."""
@@ -62,6 +70,25 @@ def insert_policy_and_get_id(conn, policy):
   cursor.executemany('INSERT INTO policy_log (policy_id, fitness, lambda) VALUES (?, ?, ?);', [(policy_id, fitness, int(action + 1)) for fitness, action in enumerate(policy)])
   conn.commit()
   return policy_id
+
+def evaluate_policy(policy_id, db_path):
+  """Evaluate the policy from the database at a specific fitness."""
+  conn = sqlite3.connect(db_path)
+  policy = fetch_policy(conn, policy_id)
+  conn.close()
+
+  # Evaluate policy at fitness 9 and print result
+  if 9 in policy:
+    print(f"Policy {policy_id} result at fitness 9: {policy[9]}")
+  else:
+    print(f"Policy {policy_id} does not have a value for fitness 9")
+
+def fetch_policy(conn, policy_id):
+  """Fetch a policy from the database and reconstruct it as a dictionary."""
+  cursor = conn.cursor()
+  cursor.execute('SELECT fitness, lambda FROM policy_log WHERE policy_id = ?', (policy_id,))
+  rows = cursor.fetchall()
+  return {fitness: lambda_val for fitness, lambda_val in rows}
 
 def insert_policy_info(conn, policy_id, num_training_episodes):
   """Update policy_info with the number of training episodes."""
@@ -78,6 +105,7 @@ def drop_all_tables(db_path):
 def main():
   try:
     with open(".env.yaml") as file:
+      global config
       config = yaml.safe_load(file)
   except FileNotFoundError:
     print("Error: '.env.yaml' does not exist.", file=sys.stderr)
