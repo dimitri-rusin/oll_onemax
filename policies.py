@@ -1,7 +1,7 @@
 import gymnasium
 import multiprocessing
-
 import numpy
+import numpy as np
 import os
 import sqlite3
 import sys
@@ -33,7 +33,8 @@ def q_learning_and_save_policy(env, total_episodes, learning_rate, gamma, epsilo
 
   for episode in range(1, total_episodes + 1):
     print("Training episode", episode)
-    state, done = env.reset(random_state.randint(100_000))[0], False
+    episode_seed = random_state.randint(100_000)
+    state, done = env.reset(episode_seed)[0], False
 
     while not done:
       action = choose_action(state, q_table, epsilon, env.n, random_state)
@@ -59,7 +60,7 @@ def save_policy(conn, q_table, episode):
   """Save the policy induced by the Q-table and launch a process for evaluation."""
   policy_id = insert_policy_and_get_id(conn, numpy.argmax(q_table, axis=1))
   insert_policy_info(conn, policy_id, episode)
-  process = multiprocessing.Process(target=evaluate_policy, args=(policy_id, config['db_path']))
+  process = multiprocessing.Process(target=evaluate_policy, args=(policy_id, config['db_path'], config['n'], config['env_seed']))
   process.start()
 
 def insert_policy_and_get_id(conn, policy):
@@ -71,24 +72,59 @@ def insert_policy_and_get_id(conn, policy):
   conn.commit()
   return policy_id
 
-def evaluate_policy(policy_id, db_path):
-  """Evaluate the policy from the database at a specific fitness."""
-  conn = sqlite3.connect(db_path)
-  policy = fetch_policy(conn, policy_id)
-  conn.close()
 
-  # Evaluate policy at fitness 9 and print result
-  if 9 in policy:
-    print(f"Policy {policy_id} result at fitness 9: {policy[9]}")
-  else:
-    print(f"Policy {policy_id} does not have a value for fitness 9")
+
+def evaluate_policy(policy_id, db_path, n, env_seed):
+    """Evaluate the policy from the database over multiple episodes."""
+    conn = sqlite3.connect(db_path)
+    policy = fetch_policy(conn, policy_id)
+    conn.close()
+
+    # Print the policy
+    print(f"Policy {policy_id} assignment: {policy}")
+
+    fitness_results = []
+    max_step_index = 0
+
+    random_state = numpy.random.RandomState(env_seed)
+    # Evaluate the policy over 10 episodes
+    env = tuning_environments.OneMaxEnv(n=n)
+    for episode in range(10):
+        episode_seed = random_state.randint(100_000)
+        fitness, max_steps = evaluate_episode(env, policy, episode_seed)
+        fitness_results.append(fitness)
+        max_step_index = max(max_step_index, max_steps)
+
+    # Print fitness values for each step across all episodes
+    for step in range(1, max_step_index + 1):
+        step_fitnesses = [episode_fitness[step - 1] if step <= len(episode_fitness) else 'N/A' for episode_fitness in fitness_results]
+        print(f"Step {step} fitnesses across episodes: {step_fitnesses}")
+
+def evaluate_episode(env, policy, episode_seed):
+    """Simulate an episode based on the policy and return fitness at each step."""
+    state = env.reset(episode_seed)[0]
+    done = False
+    fitness_values = []
+
+    while not done:
+        action = policy[state]
+        next_state, _, done, _ = env.step(action)
+        state = next_state[0]
+        fitness = env.evaluate(env.current_solution)
+        fitness_values.append(fitness)
+
+    return fitness_values, len(fitness_values)
+
+
 
 def fetch_policy(conn, policy_id):
-  """Fetch a policy from the database and reconstruct it as a dictionary."""
-  cursor = conn.cursor()
-  cursor.execute('SELECT fitness, lambda FROM policy_log WHERE policy_id = ?', (policy_id,))
-  rows = cursor.fetchall()
-  return {fitness: lambda_val for fitness, lambda_val in rows}
+    """Fetch a policy from the database and reconstruct it as a dictionary."""
+    cursor = conn.cursor()
+    cursor.execute('SELECT fitness, lambda FROM policy_log WHERE policy_id = ?', (policy_id,))
+    rows = cursor.fetchall()
+    return {fitness: lambda_val for fitness, lambda_val in rows}
+
+
 
 def insert_policy_info(conn, policy_id, num_training_episodes):
   """Update policy_info with the number of training episodes."""
