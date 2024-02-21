@@ -74,8 +74,8 @@ class OneMaxEnv(gymnasium.Env):
     best_fitness = self.evaluate(self.current_solution)
     for child in offspring:
       fitness = self.evaluate(child)
+      evaluations_this_step += 1
       if fitness > best_fitness:
         best_solution = child
         best_fitness = fitness
-      evaluations_this_step += 1
     return best_solution, evaluations_this_step

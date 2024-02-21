@@ -48,13 +48,15 @@ def q_learning_and_save_policy(env, total_episodes, learning_rate, gamma, epsilo
   return q_table
 
 def create_tables(conn):
-  """Create necessary tables in the database."""
-  with conn:
-    conn.executescript('''
-      CREATE TABLE IF NOT EXISTS policy_log (policy_id INTEGER, fitness INTEGER, lambda INTEGER);
-      CREATE TABLE IF NOT EXISTS episode_evaluation (policy_id INTEGER, steps INTEGER, episode_seed INTEGER, FOREIGN KEY(policy_id) REFERENCES policy_log(policy_id));
-      CREATE TABLE IF NOT EXISTS policy_info (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_training_episodes INTEGER, FOREIGN KEY(policy_id) REFERENCES policy_log(policy_id));
-    ''')
+    """Create necessary tables in the database, including the new episode_lengths table."""
+    with conn:
+        conn.executescript('''
+            CREATE TABLE IF NOT EXISTS policy_log (policy_id INTEGER, fitness INTEGER, lambda INTEGER);
+            CREATE TABLE IF NOT EXISTS episode_evaluation (policy_id INTEGER, steps INTEGER, episode_seed INTEGER, FOREIGN KEY(policy_id) REFERENCES policy_log(policy_id));
+            CREATE TABLE IF NOT EXISTS policy_info (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_training_episodes INTEGER, FOREIGN KEY(policy_id) REFERENCES policy_log(policy_id));
+            CREATE TABLE IF NOT EXISTS episode_lengths (policy_id INTEGER, episode_seed INTEGER, episode_length INTEGER, FOREIGN KEY(policy_id) REFERENCES policy_log(policy_id));
+        ''')
+
 
 def save_policy(conn, q_table, episode):
   """Save the policy induced by the Q-table and launch a process for evaluation."""
@@ -74,31 +76,34 @@ def insert_policy_and_get_id(conn, policy):
 
 
 
+
+
 def evaluate_policy(policy_id, db_path, n, env_seed):
-    """Evaluate the policy from the database over multiple episodes."""
+    """Evaluate the policy from the database over multiple episodes and save episode lengths to the database."""
     conn = sqlite3.connect(db_path)
     policy = fetch_policy(conn, policy_id)
-    conn.close()
-
-    # Print the policy
-    print(f"Policy {policy_id} assignment: {policy}")
-
-    fitness_results = []
-    max_step_index = 0
 
     random_state = numpy.random.RandomState(env_seed)
-    # Evaluate the policy over 10 episodes
     env = tuning_environments.OneMaxEnv(n=n)
+
     for episode in range(10):
         episode_seed = random_state.randint(100_000)
-        fitness, max_steps = evaluate_episode(env, policy, episode_seed)
-        fitness_results.append(fitness)
-        max_step_index = max(max_step_index, max_steps)
+        _, episode_length = evaluate_episode(env, policy, episode_seed)
 
-    # Print fitness values for each step across all episodes
-    for step in range(1, max_step_index + 1):
-        step_fitnesses = [episode_fitness[step - 1] if step <= len(episode_fitness) else 'N/A' for episode_fitness in fitness_results]
-        print(f"Step {step} fitnesses across episodes: {step_fitnesses}")
+        # Save episode length to the database
+        save_episode_length(conn, policy_id, episode_seed, episode_length)
+
+    conn.close()
+
+def save_episode_length(conn, policy_id, episode_seed, episode_length):
+    """Insert episode length data into the episode_lengths table."""
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO episode_lengths (policy_id, episode_seed, episode_length) VALUES (?, ?, ?);',
+                   (policy_id, episode_seed, episode_length))
+    conn.commit()
+
+
+
 
 def evaluate_episode(env, policy, episode_seed):
     """Simulate an episode based on the policy and return fitness at each step."""
@@ -110,8 +115,7 @@ def evaluate_episode(env, policy, episode_seed):
         action = policy[state]
         next_state, _, done, _ = env.step(action)
         state = next_state[0]
-        fitness = env.evaluate(env.current_solution)
-        fitness_values.append(fitness)
+        fitness_values.append(state)
 
     return fitness_values, len(fitness_values)
 
