@@ -22,9 +22,11 @@ except FileNotFoundError:
 if not os.path.exists('ppo_data/'):
   os.makedirs('ppo_data/')
 
+
 environment = tuning_environments.OneMaxOll(config)
 
-import numpy as np
+
+
 
 class TabularSARSAAgent:
   def __init__(self, num_states=10, num_actions=10, alpha=0.1, gamma=0.99, epsilon=0.1):
@@ -43,6 +45,8 @@ class TabularSARSAAgent:
     if np.random.rand() < self.epsilon:
       return np.random.choice(self.num_actions)
     else:
+      inspectify.d(state)
+      inspectify.d(self.Q)
       return np.argmax(self.Q[state])
 
   def update(self, state, action, reward, next_state, next_action):
@@ -54,7 +58,7 @@ class TabularSARSAAgent:
 def train_sarsa(env, agent, num_episodes):
   """ Training loop for the SARSA agent. """
   for episode in range(num_episodes):
-    state = env.reset()
+    state, _ = env.reset()
     action = agent.choose_action(state)
 
     while True:
@@ -69,6 +73,5 @@ def train_sarsa(env, agent, num_episodes):
       if done:
         break
 
-# Usage
 agent = TabularSARSAAgent()
 train_sarsa(environment, agent, num_episodes=1000)
