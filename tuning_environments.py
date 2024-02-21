@@ -1,129 +1,81 @@
 import gymnasium
-import inspectify
-import numpy
-import paper_code.onell_algs
-import random
-import dacbench
-from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import BaseCallback
-import csv
-import inspectify
-import numpy
+import numpy as np
 import os
-import sys
-import torch
-import tuning_environments
-import yaml
+import plotly.graph_objects as go
+import sqlite3
 
 
 
-class OneMaxOll(dacbench.AbstractEnv):
-  def __init__(self, config):
+class OneMaxEnv(gymnasium.Env):
+  def __init__(self, n, seed=None):
+    super(OneMaxEnv, self).__init__()
+    self.n = n
+    self.action_space = gymnasium.spaces.Discrete(n)
+    self.observation_space = gymnasium.spaces.Box(low=0, high=n - 1, shape=(1,), dtype=np.int32)
+    self.seed = seed
+    self.random = np.random.RandomState(self.seed)
+    assert seed is None
+    self.optimum = None
+    self.current_solution = None
+    self.evaluations = {}
 
-    self.n = config['num_dimensions']
+  def reset(self, episode_seed):
+    # Use the provided seed for reproducibility
+    self.seed = episode_seed
+    self.random = np.random.RandomState(self.seed)
 
-    # Required only for AbstractEnv.
-    config["action_space"] = gymnasium.spaces.Box(low=1, high=self.n, shape=(1,), dtype=numpy.float32)
-    config["benchmark_info"] = "OneMaxOll"
-    config["cutoff"] = 9_999
-    config["instance_set"] = {'example_instance': None}
-    config["observation_space"] = gymnasium.spaces.Box(low=0, high=self.n, shape=(1,), dtype=numpy.float32)
-    config["reward_range"] = (-self.n, 0)
-    self.config = config
+    self.current_solution = np.zeros(self.n, dtype=int)
+    self.optimum = self.random.randint(2, size=self.n)
 
-    super(OneMaxOll, self).__init__(self.config)
+    # Set approximately 85% of the bits to 1
+    num_ones = int(self.n * 0.5)
+    one_positions = self.random.choice(self.n, num_ones, replace=False)
+    self.current_solution[one_positions] = 1
 
-    self.random_seed = config['random_seed']
-    self.observation_space = config["observation_space"]
-    self.random_number_generator = numpy.random.default_rng(self.random_seed)
+    self.evaluations = {}
+    return np.array([self.evaluate(self.current_solution)])
 
-    # WARNING: The optimum for self.x is deterministic: it is the all-ones string.
-    self.x = paper_code.onell_algs.OneMax(self.n, rng = self.random_number_generator)
+  def step(self, action):
+    λ = action + 1
+    offspring = self.generate_offspring(λ)
+    self.current_solution, evaluations_this_step = self.select_solution(offspring)
+    fitness = self.evaluate(self.current_solution)
+    reward = -evaluations_this_step
+    done = fitness == self.n
+    return np.array([fitness]), reward, done, {}
 
-    # We evaluate the onemax function once in the OneMax constructor
-    self.agent = None
+  def evaluate(self, solution):
+    solution_key = tuple(solution)
+    if solution_key in self.evaluations:
+      return self.evaluations[solution_key]
+    fitness = np.sum(solution)
+    self.evaluations[solution_key] = fitness
+    return fitness
 
-    self.num_evaluations = 1
-    # There is 1 evaluation in the above paper_code.onell_algs.OneMax().
+  def generate_offspring(self, λ):
+    offspring = []
+    for _ in range(λ):
+      mutated = self.mutate(self.current_solution)
+      crossed = self.crossover(self.current_solution, mutated)
+      offspring.append(crossed)
+    return offspring
 
-    self.num_policies = 0
-    self.num_resets = 0
-    self.num_steps = 0
-    self.num_steps_across_resets = 0
+  def mutate(self, solution):
+    mutation = self.random.randint(2, size=self.n)
+    return np.bitwise_xor(solution, mutation)
 
-    with open('ppo_data/episodes.csv', 'w', newline='') as file:
-      writer = csv.writer(file, delimiter='|')
-      writer.writerow(['Step across episodes', 'Episode', 'Step', 'Fitness', 'Lambda'])
+  def crossover(self, parent, other):
+    mask = self.random.randint(2, size=self.n)
+    return np.where(mask, parent, other)
 
-  def set_agent(self, agent):
-    self.agent = agent
-
-  def reset_(self):
-    self.num_resets += 1
-    self.num_steps = 0
-    self.random_number_generator = numpy.random.default_rng(self.random_seed)
-    self.x = paper_code.onell_algs.OneMax(self.n, rng = self.random_number_generator)
-    return numpy.array([self.x.fitness])
-
-  def reset(self, seed = None):
-    if seed is not None:
-      self.random_seed = seed
-    super().reset_()
-    return (self.reset_(), "INFO")
-
-  def step(self, lambda_):
-    if isinstance(lambda_, numpy.ndarray) and lambda_.size == 1:
-      lambda_ = lambda_.item()
-    p = lambda_ / self.n
-    population_size = numpy.round(lambda_).astype(int)
-    prior_fitness = self.x.fitness
-    xprime, f_xprime, ne1 = self.x.mutate(p, population_size, self.random_number_generator)
-
-    c = 1 / lambda_
-    y, f_y, ne2 = self.x.crossover(
-      xprime,
-      c,
-      population_size,
-      True,
-      True,
-      self.random_number_generator,
-    )
-
-    if f_y >= self.x.fitness:
-      self.x = y
-
-    self.num_evaluations = self.num_evaluations + ne1 + ne2
-    self.num_steps += 1
-    self.num_steps_across_resets += 1
-
-    num_evaluations_of_this_step = ne1 + ne2
-    reward = -num_evaluations_of_this_step + 10 * (self.x.fitness - prior_fitness)
-    terminated = self.x.is_optimal()
-    truncated = False
-    info = {}
-
-    # ======================================================================================
-
-    # SAVE TRAINING EPISODES
-    if self.num_steps_across_resets % self.config['episode_steps_omitted_steps'] == 0:
-      with open('ppo_data/episodes.csv', 'a', newline = '') as file:
-        row = self.num_steps_across_resets, self.num_resets + 1, self.num_steps, prior_fitness, lambda_, reward, self.x.fitness, num_evaluations_of_this_step
-        writer = csv.writer(file, delimiter = '|')
-        writer.writerow(row)
-
-    # SAVE TRAINED POLICY
-    if self.num_steps_across_resets % self.config['policy_omitted_steps'] == 0:
-      self.num_policies += 1
-      low = int(self.config['observation_space'].low[0])
-      high = int(self.config['observation_space'].high[0])
-      fitnesses = numpy.arange(low, high).reshape(-1, 1)
-      # lambdas, _ = self.agent.predict(fitnesses, deterministic = True)
-      # lambdas_1d = lambdas.flatten().tolist()
-      # lambdas_1d = [self.num_policies] + lambdas_1d
-      # with open('ppo_data/policies.csv', 'a', newline = '') as file:
-      #   writer = csv.writer(file, delimiter = '|')
-      #   writer.writerow(lambdas_1d)
-
-    # ======================================================================================
-
-    return numpy.array([self.x.fitness]), reward, terminated, truncated, info
+  def select_solution(self, offspring):
+    evaluations_this_step = 0
+    best_solution = self.current_solution
+    best_fitness = self.evaluate(self.current_solution)
+    for child in offspring:
+      fitness = self.evaluate(child)
+      if fitness > best_fitness:
+        best_solution = child
+        best_fitness = fitness
+      evaluations_this_step += 1
+    return best_solution, evaluations_this_step

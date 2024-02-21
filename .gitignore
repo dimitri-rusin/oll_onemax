@@ -2,5 +2,5 @@
 .env
 logs/
 paper_code/
-ppo_data/
+data/
 traces.csv
