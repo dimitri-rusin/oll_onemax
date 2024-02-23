@@ -3,11 +3,11 @@ import numpy as np
 import sqlite3
 
 # policy_id   episode_id  episode_seed    episode_length
-# 2   35  78833   3481
+# 4   72  77655   34
 
 n = 25
-policy_id_to_evaluate = 2
-episode_seed = 78833  # Specify the episode seed
+policy_id_to_evaluate = 4
+episode_seed = 77655  # Specify the episode seed
 
 trace_path = 'data/single_evaluation.md'
 trace_file = open(trace_path, 'w')
@@ -36,7 +36,7 @@ def load_env_and_policy(db_path, policy_id):
     cursor.execute('SELECT fitness, lambda FROM policies_data WHERE policy_id = ?', (policy_id,))
     rows = cursor.fetchall()
     policy = {fitness: lambda_val for fitness, lambda_val in rows}
-    env = strategies.OneMaxEnv(n=n)
+    env = strategies.OneMaxOLL(n=n)
     conn.close()
     return env, policy
 

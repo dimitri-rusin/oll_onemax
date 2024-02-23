@@ -1,7 +1,10 @@
+import onell_algs_rs
 import gymnasium
+import inspectify
 import multiprocessing
 import numpy
 import os
+import paper_code.onell_algs
 import sqlite3
 import sys
 import yaml
@@ -10,81 +13,69 @@ config = None
 
 
 
-# ============== ENVIRONMENT ==============
-class OneMaxEnv(gymnasium.Env):
- def __init__(self, n, seed=None):
-  super(OneMaxEnv, self).__init__()
-  self.n = n
-  self.action_space = gymnasium.spaces.Discrete(n)
-  self.observation_space = gymnasium.spaces.Box(low=0, high=n - 1, shape=(1,), dtype=numpy.int32)
-  self.seed = seed
-  self.random = numpy.random.RandomState(self.seed)
-  assert seed is None
-  self.optimum = None
-  self.current_solution = None
-  self.evaluations = {}
 
- def reset(self, episode_seed):
-  # Use the provided seed for reproducibility
-  self.seed = episode_seed
-  self.random = numpy.random.RandomState(self.seed)
 
-  self.current_solution = numpy.zeros(self.n, dtype=int)
-  self.optimum = self.random.randint(2, size=self.n)
+# ============== ENVIRONMENT - BEGIN ==============
 
-  # Set approximately 85% of the bits to 1
-  num_ones = int(self.n * 0.5)
-  one_positions = self.random.choice(self.n, num_ones, replace=False)
-  self.current_solution[one_positions] = 1
+class OneMaxOLL(gymnasium.Env):
+  def __init__(self, n, seed=None):
+    super(OneMaxOLL, self).__init__()
+    self.n = n
+    self.action_space = gymnasium.spaces.Discrete(n)
+    self.observation_space = gymnasium.spaces.Box(low=0, high=n - 1, shape=(1,), dtype=numpy.int32)
+    self.seed = seed
+    self.random = numpy.random.RandomState(self.seed)
+    self.random_number_generator = numpy.random.default_rng(self.seed)
+    assert seed is None
+    self.current_solution = None
 
-  self.evaluations = {}
-  return numpy.array([self.evaluate(self.current_solution)])
+  def reset(self, episode_seed):
+    # Use the provided seed for reproducibility
+    self.seed = episode_seed
+    self.random = numpy.random.RandomState(self.seed)
+    self.random_number_generator = numpy.random.default_rng(self.seed)
+    self.current_solution = paper_code.onell_algs.OneMax(self.n, rng = self.random_number_generator)
 
- def step(self, action):
-  λ = action + 1
-  offspring = self.generate_offspring(λ)
-  self.current_solution, evaluations_this_step = self.select_solution(offspring)
-  fitness = self.evaluate(self.current_solution)
-  reward = -evaluations_this_step
-  done = fitness == self.n
-  return numpy.array([fitness]), reward, done, {}
+    # Set approximately 85% of the bits to 1
+    num_ones = int(self.n * 0.5)
+    one_positions = self.random.choice(self.n, num_ones, replace=False)
+    self.current_solution.data[one_positions] = True
+    self.current_solution.eval()
 
- def evaluate(self, solution):
-  solution_key = tuple(solution)
-  if solution_key in self.evaluations:
-   return self.evaluations[solution_key]
-  fitness = numpy.sum(solution)
-  self.evaluations[solution_key] = fitness
-  return fitness
+    return numpy.array([self.current_solution.fitness])
 
- def generate_offspring(self, λ):
-  offspring = []
-  for _ in range(λ):
-   mutated = self.mutate(self.current_solution)
-   crossed = self.crossover(self.current_solution, mutated)
-   offspring.append(crossed)
-  return offspring
+  def step(self, λ):
+    if isinstance(λ, numpy.ndarray) and λ.size == 1:
+      λ = λ.item()
+    λ += 1
+    p = λ / self.n
+    population_size = numpy.round(λ).astype(int)
+    prior_fitness = self.current_solution.fitness
+    xprime, f_xprime, ne1 = self.current_solution.mutate(p, population_size, self.random_number_generator)
 
- def mutate(self, solution):
-  mutation = self.random.randint(2, size=self.n)
-  return numpy.bitwise_xor(solution, mutation)
+    c = 1 / λ
+    y, f_y, ne2 = self.current_solution.crossover(
+      xprime,
+      c,
+      population_size,
+      True,
+      True,
+      self.random_number_generator,
+    )
 
- def crossover(self, parent, other):
-  mask = self.random.randint(2, size=self.n)
-  return numpy.where(mask, parent, other)
+    if f_y >= self.current_solution.fitness:
+      self.current_solution = y
 
- def select_solution(self, offspring):
-  evaluations_this_step = 0
-  best_solution = self.current_solution
-  best_fitness = self.evaluate(self.current_solution)
-  for child in offspring:
-   fitness = self.evaluate(child)
-   evaluations_this_step += 1
-   if fitness > best_fitness:
-    best_solution = child
-    best_fitness = fitness
-  return best_solution, evaluations_this_step
-# ============== ENVIRONMENT ==============
+    num_evaluations_of_this_step = ne1 + ne2
+    reward = -num_evaluations_of_this_step + 10 * (self.current_solution.fitness - prior_fitness)
+    terminated = self.current_solution.is_optimal()
+    info = {}
+
+    return numpy.array([self.current_solution.fitness]), reward, terminated, info
+
+# ============== ENVIRONMENT - END ==============
+
+
 
 def q_learning_and_save_policy(env, total_episodes, learning_rate, gamma, epsilon, seed, conn, evaluation_interval):
     """Perform Q-learning, update Q-table, choose actions, save and evaluate policies."""
@@ -179,7 +170,7 @@ def evaluate_policy(policy_id, db_path, n, env_seed, num_evaluation_episodes):
     policy = fetch_policy(conn, policy_id)
 
     random_state = numpy.random.RandomState(env_seed)
-    env = OneMaxEnv(n=n)
+    env = OneMaxOLL(n=n)
 
     for episode in range(num_evaluation_episodes):
         episode_seed = random_state.randint(100_000)
@@ -206,13 +197,13 @@ def evaluate_episode(env, policy, episode_seed):
   """Simulate an episode based on the policy and return fitness at each step."""
   state = env.reset(episode_seed)[0]
   done = False
-  fitness_values = [state]
+  fitness_values = []
 
   while not done:
+    fitness_values.append(state)
     action = policy[state]
     next_state, _, done, _ = env.step(action)
     state = next_state[0]
-    fitness_values.append(state)
 
   return fitness_values, len(fitness_values) - 1
 
@@ -262,7 +253,7 @@ def main():
     evaluate_policy(-1, config['db_path'], config['n'], config['env_seed'], config['num_evaluation_episodes'])
 
     # Q-learning process
-    env = OneMaxEnv(n=config['n'])
+    env = OneMaxOLL(n=config['n'])
     q_table = q_learning_and_save_policy(env, config['episodes'], config['learning_rate'], config['gamma'], config['epsilon'], numpy.random.randint(0, 100_000), conn, config['evaluation_interval'])
 
     conn.close()
