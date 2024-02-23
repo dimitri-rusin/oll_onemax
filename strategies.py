@@ -174,7 +174,7 @@ def evaluate_policy(policy_id, db_path, n, env_seed, num_evaluation_episodes):
 
     for episode in range(num_evaluation_episodes):
         episode_seed = random_state.randint(100_000)
-        fitness_values, episode_length = evaluate_episode(env, policy, episode_seed)
+        episode_length = evaluate_episode(env, policy, episode_seed)
 
         # Save episode info to the database
         cursor = conn.cursor()
@@ -205,7 +205,7 @@ def evaluate_episode(env, policy, episode_seed):
     next_state, _, done, _ = env.step(action)
     state = next_state[0]
 
-  return fitness_values, len(fitness_values) - 1
+  return len(fitness_values) - 1
 
 def fetch_policy(conn, policy_id):
   """Fetch a policy from the database and reconstruct it as a dictionary."""
