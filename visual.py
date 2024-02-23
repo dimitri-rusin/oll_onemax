@@ -16,27 +16,12 @@ import yaml
 # Dash App Setup
 app = dash.Dash(__name__)
 
-# App Layout
-app.layout = html.Div([
-    dcc.Graph(id='policy-performance-plot'),
-    dcc.Graph(id='fitness-lambda-plot')
-], style={'fontFamily': 'Courier New, monospace', 'backgroundColor': 'rgba(0,0,0,0)'})
-
 # Extend the App Layout to include the boxplot
 app.layout = html.Div([
     dcc.Graph(id='policy-performance-plot'),
+    dcc.Graph(id='episode-length-boxplot'),  # New boxplot graph
     dcc.Graph(id='fitness-lambda-plot'),
-    dcc.Graph(id='episode-length-boxplot')  # New boxplot graph
 ], style={'fontFamily': 'Courier New, monospace', 'backgroundColor': 'rgba(0,0,0,0)'})
-
-# Extend the App Layout to include the new graph for average fitness and variance
-app.layout = html.Div([
-    dcc.Graph(id='policy-performance-plot'),
-    dcc.Graph(id='fitness-lambda-plot'),
-    dcc.Graph(id='episode-length-boxplot'),
-    dcc.Graph(id='average-fitness-plot')  # New graph for average fitness and variance
-], style={'fontFamily': 'Courier New, monospace', 'backgroundColor': 'rgba(0,0,0,0)'})
-
 
 # Load database path from .env.yaml
 def load_db_path():
@@ -175,90 +160,6 @@ def update_episode_length_boxplot(clickData):
         conn.close()
 
     return {'data': [], 'layout': go.Layout(title='Select a Policy to View Episode Lengths')}
-
-
-# Callback for the average fitness plot
-@app.callback(
-    Output('average-fitness-plot', 'figure'),
-    [Input('policy-performance-plot', 'clickData')]
-)
-def update_average_fitness_plot(clickData):
-    if clickData:
-        num_training_episodes = clickData['points'][0]['x']
-        db_path = load_db_path()
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-
-        # Find the policy ID corresponding to the clicked number of training episodes
-        cursor.execute('SELECT policy_id FROM policies_info WHERE num_training_episodes = ?', (num_training_episodes,))
-        result = cursor.fetchone()
-        policy_id = result[0] if result else None
-
-        if policy_id is not None:
-            # Fetch step info for the selected policy
-            cursor.execute('''
-                SELECT step_index, fitness FROM step_info
-                JOIN episode_info ON step_info.episode_id = episode_info.episode_id
-                WHERE episode_info.policy_id = ?;
-            ''', (policy_id,))
-            step_data = cursor.fetchall()
-
-            # Convert to DataFrame for processing
-            df = pd.DataFrame(step_data, columns=['step_index', 'fitness'])
-
-            # Calculate mean and standard deviation for each step_index
-            grouped = df.groupby('step_index')['fitness']
-            avg_fitness = grouped.mean()
-            std_fitness = grouped.std()
-
-            # Create the plot with mean fitness line
-            fig = go.Figure([
-                go.Scatter(
-                    name='Mean Fitness',
-                    x=df['step_index'],
-                    y=avg_fitness,
-                    mode='lines',
-                    line=dict(color='blue')
-                ),
-                go.Scatter(
-                    name='Upper Bound',
-                    x=df['step_index'],
-                    y=avg_fitness+std_fitness,
-                    mode='lines',
-                    marker=dict(color="#444"),
-                    line=dict(width=0),
-                    showlegend=False
-                ),
-                go.Scatter(
-                    name='Lower Bound',
-                    x=df['step_index'],
-                    y=avg_fitness-std_fitness,
-                    marker=dict(color="#444"),
-                    line=dict(width=0),
-                    mode='lines',
-                    fillcolor='rgba(68, 68, 68, 0.3)',
-                    fill='tonexty',
-                    showlegend=False
-                )
-            ])
-
-            # Update layout
-            fig.update_layout(
-                title=f'Average Fitness with Variance for Policy {policy_id}',
-                xaxis_title="Step Index",
-                yaxis_title="Fitness",
-                font=stylish_layout['font'],
-                paper_bgcolor=stylish_layout['paper_bgcolor'],
-                plot_bgcolor=stylish_layout['plot_bgcolor']
-            )
-
-            conn.close()
-            return fig
-
-    return {'data': [], 'layout': go.Layout(title='Select a Policy to View Average Fitness')}
-
-
-
 
 if __name__ == '__main__':
     app.run_server(debug=True)

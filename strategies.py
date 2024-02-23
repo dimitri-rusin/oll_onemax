@@ -130,7 +130,7 @@ def create_tables(conn):
             CREATE TABLE IF NOT EXISTS policies_data (policy_id INTEGER, fitness INTEGER, lambda INTEGER);
             CREATE TABLE IF NOT EXISTS policies_info (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_training_episodes INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
             CREATE TABLE IF NOT EXISTS episode_info (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
-            CREATE TABLE IF NOT EXISTS step_info (episode_id INTEGER, step_index INTEGER, fitness INTEGER, FOREIGN KEY(episode_id) REFERENCES episode_info(episode_id));
+            CREATE TABLE IF NOT EXISTS episode_data (episode_id INTEGER, step_index INTEGER, fitness INTEGER, FOREIGN KEY(episode_id) REFERENCES episode_info(episode_id));
         ''')
 
 def save_policy(conn, q_table, episode):
@@ -146,16 +146,26 @@ def save_policy(conn, q_table, episode):
   ))
   process.start()
 
-def insert_policy_and_get_id(conn, policy):
- """Insert policy into policies_data and return the generated policy_id."""
- cursor = conn.cursor()
- cursor.execute('INSERT INTO policies_info (num_training_episodes) VALUES (?);', (0,))
- policy_id = cursor.lastrowid
- cursor.executemany('INSERT INTO policies_data (policy_id, fitness, lambda) VALUES (?, ?, ?);', [(policy_id, fitness, int(action + 1)) for fitness, action in enumerate(policy)])
- conn.commit()
- return policy_id
+def insert_special_policy(conn, num_dimensions):
+    """Insert the special policy with policy_id -1."""
+    policy_lambdas = [int(numpy.sqrt(num_dimensions / (num_dimensions - fitness))) for fitness in range(num_dimensions)]
+    policy_id = -1  # Special policy ID
+    insert_policy_and_get_id(conn, policy_lambdas, policy_id)
 
-# Modify the evaluate_policy function to use episode_info and step_info
+def insert_policy_and_get_id(conn, policy, policy_id=None):
+    """Insert policy into policies_data and return the generated policy_id."""
+    cursor = conn.cursor()
+    if policy_id is None:
+        cursor.execute('INSERT INTO policies_info (num_training_episodes) VALUES (?);', (0,))
+        policy_id = cursor.lastrowid
+    else:
+        cursor.execute('INSERT INTO policies_info (policy_id, num_training_episodes) VALUES (?, ?);', (policy_id, 0,))
+    cursor.executemany('INSERT INTO policies_data (policy_id, fitness, lambda) VALUES (?, ?, ?);',
+                       [(policy_id, fitness, int(action)) for fitness, action in enumerate(policy)])
+    conn.commit()
+    return policy_id
+
+# Modify the evaluate_policy function to use episode_info and episode_data
 def evaluate_policy(policy_id, db_path, n, env_seed, num_evaluation_episodes):
     conn = sqlite3.connect(db_path)
     policy = fetch_policy(conn, policy_id)
@@ -175,7 +185,7 @@ def evaluate_policy(policy_id, db_path, n, env_seed, num_evaluation_episodes):
 
         # Save step info to the database
         for step_index, fitness in enumerate(fitness_values):
-            cursor.execute('INSERT INTO step_info (episode_id, step_index, fitness) VALUES (?, ?, ?);',
+            cursor.execute('INSERT INTO episode_data (episode_id, step_index, fitness) VALUES (?, ?, ?);',
                            (episode_id, step_index, int(fitness)))
 
         conn.commit()
@@ -232,22 +242,24 @@ def drop_all_tables(db_path):
     cursor.executescript(drop_script)
 
 def main():
- try:
-  with open(".env.yaml") as file:
-   global config
-   config = yaml.safe_load(file)
- except FileNotFoundError:
-  print("Error: '.env.yaml' does not exist.", file=sys.stderr)
-  sys.exit(1)
+  try:
+    with open(".env.yaml") as file:
+      global config
+      config = yaml.safe_load(file)
+  except FileNotFoundError:
+    print("Error: '.env.yaml' does not exist.", file=sys.stderr)
+    sys.exit(1)
 
- setup_config(config)
- conn = setup_database(config['db_path'])
- create_tables(conn)
+  setup_config(config)
+  conn = setup_database(config['db_path'])
+  create_tables(conn)
 
- env = OneMaxEnv(n=config['n'])
- q_table = q_learning_and_save_policy(env, config['episodes'], config['learning_rate'], config['gamma'], config['epsilon'], numpy.random.randint(0, 100_000), conn, config['evaluation_interval'])
+  insert_special_policy(conn, config['n'])
 
- conn.close()
+  env = OneMaxEnv(n=config['n'])
+  q_table = q_learning_and_save_policy(env, config['episodes'], config['learning_rate'], config['gamma'], config['epsilon'], numpy.random.randint(0, 100_000), conn, config['evaluation_interval'])
+
+  conn.close()
 
 def setup_config(config):
  """Setup global configuration parameters."""
