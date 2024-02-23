@@ -102,26 +102,36 @@ def update_q_table(state, action, reward, next_state, done, q_table, learning_ra
  q_target = reward if done else reward + gamma * numpy.max(q_table[next_state])
  q_table[state, action] += learning_rate * (q_target - q_predict)
 
+
+
 def q_learning_and_save_policy(env, total_episodes, learning_rate, gamma, epsilon, seed, conn, evaluation_interval):
- """Perform Q-learning and save the policy to the database."""
- random_state = numpy.random.RandomState(seed)
- q_table = init_q_table(env.n)
+    """Perform Q-learning and save the policy to the database."""
+    random_state = numpy.random.RandomState(seed)
+    q_table = init_q_table(env.n)
 
- for episode in range(1, total_episodes + 1):
-  print("Training episode", episode)
-  episode_seed = random_state.randint(100_000)
-  state, done = env.reset(episode_seed)[0], False
+    # Evaluate and save the initial policy derived from the initial Q-table
+    initial_policy = numpy.argmax(q_table, axis=1)
+    # Save and evaluate the initial policy. It should automatically get ID 1 if the table is empty
+    initial_policy_id = insert_policy_and_get_id(conn, initial_policy)
+    insert_policy_info(conn, initial_policy_id, 0)  # 0 training episodes for initial policy
+    evaluate_policy(initial_policy_id, config['db_path'], config['n'], config['env_seed'], config['num_evaluation_episodes'])
 
-  while not done:
-   action = choose_action(state, q_table, epsilon, env.n, random_state)
-   next_state, reward, done, _ = env.step(action)
-   update_q_table(state, action, reward, next_state[0], done, q_table, learning_rate, gamma)
-   state = next_state[0]
+    for episode in range(1, total_episodes + 1):
+        print("Training episode", episode)
+        episode_seed = random_state.randint(100_000)
+        state, done = env.reset(episode_seed)[0], False
 
-  if episode % evaluation_interval == 0:
-   save_policy(conn, q_table, episode)
+        while not done:
+            action = choose_action(state, q_table, epsilon, env.n, random_state)
+            next_state, reward, done, _ = env.step(action)
+            update_q_table(state, action, reward, next_state[0], done, q_table, learning_rate, gamma)
+            state = next_state[0]
 
- return q_table
+        if episode % evaluation_interval == 0:
+            save_policy(conn, q_table, episode)
+
+    return q_table
+
 
 def create_tables(conn):
     """Create necessary tables in the database."""
@@ -130,7 +140,6 @@ def create_tables(conn):
             CREATE TABLE IF NOT EXISTS policies_data (policy_id INTEGER, fitness INTEGER, lambda INTEGER);
             CREATE TABLE IF NOT EXISTS policies_info (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_training_episodes INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
             CREATE TABLE IF NOT EXISTS episode_info (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
-            CREATE TABLE IF NOT EXISTS episode_data (episode_id INTEGER, step_index INTEGER, fitness INTEGER, FOREIGN KEY(episode_id) REFERENCES episode_info(episode_id));
         ''')
 
 def save_policy(conn, q_table, episode):
@@ -182,11 +191,6 @@ def evaluate_policy(policy_id, db_path, n, env_seed, num_evaluation_episodes):
         cursor.execute('INSERT INTO episode_info (policy_id, episode_seed, episode_length) VALUES (?, ?, ?);',
                        (policy_id, episode_seed, episode_length))
         episode_id = cursor.lastrowid
-
-        # Save step info to the database
-        for step_index, fitness in enumerate(fitness_values):
-            cursor.execute('INSERT INTO episode_data (episode_id, step_index, fitness) VALUES (?, ?, ?);',
-                           (episode_id, step_index, int(fitness)))
 
         conn.commit()
 
@@ -242,24 +246,27 @@ def drop_all_tables(db_path):
     cursor.executescript(drop_script)
 
 def main():
-  try:
-    with open(".env.yaml") as file:
-      global config
-      config = yaml.safe_load(file)
-  except FileNotFoundError:
-    print("Error: '.env.yaml' does not exist.", file=sys.stderr)
-    sys.exit(1)
+    try:
+        with open(".env.yaml") as file:
+            global config
+            config = yaml.safe_load(file)
+    except FileNotFoundError:
+        print("Error: '.env.yaml' does not exist.", file=sys.stderr)
+        sys.exit(1)
 
-  setup_config(config)
-  conn = setup_database(config['db_path'])
-  create_tables(conn)
+    setup_config(config)
+    conn = setup_database(config['db_path'])
+    create_tables(conn)
 
-  insert_special_policy(conn, config['n'])
+    # Insert and evaluate the special policy
+    insert_special_policy(conn, config['n'])
+    evaluate_policy(-1, config['db_path'], config['n'], config['env_seed'], config['num_evaluation_episodes'])
 
-  env = OneMaxEnv(n=config['n'])
-  q_table = q_learning_and_save_policy(env, config['episodes'], config['learning_rate'], config['gamma'], config['epsilon'], numpy.random.randint(0, 100_000), conn, config['evaluation_interval'])
+    # Q-learning process
+    env = OneMaxEnv(n=config['n'])
+    q_table = q_learning_and_save_policy(env, config['episodes'], config['learning_rate'], config['gamma'], config['epsilon'], numpy.random.randint(0, 100_000), conn, config['evaluation_interval'])
 
-  conn.close()
+    conn.close()
 
 def setup_config(config):
  """Setup global configuration parameters."""
