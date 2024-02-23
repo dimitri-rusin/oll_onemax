@@ -86,35 +86,14 @@ class OneMaxEnv(gymnasium.Env):
   return best_solution, evaluations_this_step
 # ============== ENVIRONMENT ==============
 
-
-
-def init_q_table(n):
- """Initialize a Q-table with zeros."""
- return numpy.zeros((n, n))
-
-def choose_action(state, q_table, epsilon, n, random_state):
- """Choose an action based on the current state and Q-table."""
- return random_state.randint(n) if random_state.random() < epsilon else numpy.argmax(q_table[state])
-
-def update_q_table(state, action, reward, next_state, done, q_table, learning_rate, gamma):
- """Update the Q-table using the Q-learning algorithm."""
- q_predict = q_table[state, action]
- q_target = reward if done else reward + gamma * numpy.max(q_table[next_state])
- q_table[state, action] += learning_rate * (q_target - q_predict)
-
-
-
 def q_learning_and_save_policy(env, total_episodes, learning_rate, gamma, epsilon, seed, conn, evaluation_interval):
-    """Perform Q-learning and save the policy to the database."""
-    random_state = numpy.random.RandomState(seed)
-    q_table = init_q_table(env.n)
+    """Perform Q-learning, update Q-table, choose actions, save and evaluate policies."""
 
-    # Evaluate and save the initial policy derived from the initial Q-table
-    initial_policy = numpy.argmax(q_table, axis=1)
-    # Save and evaluate the initial policy. It should automatically get ID 1 if the table is empty
-    initial_policy_id = insert_policy_and_get_id(conn, initial_policy)
-    insert_policy_info(conn, initial_policy_id, 0)  # 0 training episodes for initial policy
-    evaluate_policy(initial_policy_id, config['db_path'], config['n'], config['env_seed'], config['num_evaluation_episodes'])
+    # Initialize a Q-table with zeros
+    q_table = numpy.zeros((env.n, env.n))
+
+    # Setup random state
+    random_state = numpy.random.RandomState(seed)
 
     for episode in range(1, total_episodes + 1):
         print("Training episode", episode)
@@ -122,16 +101,34 @@ def q_learning_and_save_policy(env, total_episodes, learning_rate, gamma, epsilo
         state, done = env.reset(episode_seed)[0], False
 
         while not done:
-            action = choose_action(state, q_table, epsilon, env.n, random_state)
+            # Choose an action based on the current state and Q-table
+            action = random_state.randint(env.n) if random_state.random() < epsilon else numpy.argmax(q_table[state])
+
+            # Perform the action
             next_state, reward, done, _ = env.step(action)
-            update_q_table(state, action, reward, next_state[0], done, q_table, learning_rate, gamma)
+
+            # Update the Q-table using the Q-learning algorithm
+            q_predict = q_table[state, action]
+            q_target = reward if done else reward + gamma * numpy.max(q_table[next_state[0]])
+            q_table[state, action] += learning_rate * (q_target - q_predict)
+
             state = next_state[0]
 
         if episode % evaluation_interval == 0:
-            save_policy(conn, q_table, episode)
+            # Save the policy induced by the Q-table and launch a process for evaluation
+            policy = [max(1, int(numpy.sqrt(action))) for action in numpy.argmax(q_table, axis=1)]
+            policy_id = insert_policy_and_get_id(conn, policy)
+            insert_policy_info(conn, policy_id, episode)
+            process = multiprocessing.Process(target=evaluate_policy, args=(
+                policy_id,
+                config['db_path'],
+                config['n'],
+                config['env_seed'],
+                config['num_evaluation_episodes'],
+            ))
+            process.start()
 
     return q_table
-
 
 def create_tables(conn):
     """Create necessary tables in the database."""
@@ -143,17 +140,19 @@ def create_tables(conn):
         ''')
 
 def save_policy(conn, q_table, episode):
-  """Save the policy induced by the Q-table and launch a process for evaluation."""
-  policy_id = insert_policy_and_get_id(conn, numpy.argmax(q_table, axis=1))
-  insert_policy_info(conn, policy_id, episode)
-  process = multiprocessing.Process(target=evaluate_policy, args=(
-      policy_id,
-      config['db_path'],
-      config['n'],
-      config['env_seed'],
-      config['num_evaluation_episodes'],
-  ))
-  process.start()
+    """Save the policy induced by the Q-table and launch a process for evaluation."""
+    # Modify the policy to ensure lambda >= 1
+    modified_policy = [max(1, int(numpy.sqrt(action))) for action in numpy.argmax(q_table, axis=1)]
+    policy_id = insert_policy_and_get_id(conn, modified_policy)
+    insert_policy_info(conn, policy_id, episode)
+    process = multiprocessing.Process(target=evaluate_policy, args=(
+        policy_id,
+        config['db_path'],
+        config['n'],
+        config['env_seed'],
+        config['num_evaluation_episodes'],
+    ))
+    process.start()
 
 def insert_special_policy(conn, num_dimensions):
     """Insert the special policy with policy_id -1."""
