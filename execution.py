@@ -1,10 +1,13 @@
-import tuning_environments
+import strategies
 import numpy as np
 import sqlite3
 
+# policy_id   episode_id  episode_seed    episode_length
+# 2   35  78833   3481
+
 n = 25
-policy_id_to_evaluate = 5
-episode_seed = 56088  # Specify the episode seed
+policy_id_to_evaluate = 2
+episode_seed = 78833  # Specify the episode seed
 
 trace_path = 'data/single_evaluation.md'
 trace_file = open(trace_path, 'w')
@@ -30,10 +33,10 @@ def evaluate_policy(env, policy, episode_seed):
 def load_env_and_policy(db_path, policy_id):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute('SELECT fitness, lambda FROM policy_log WHERE policy_id = ?', (policy_id,))
+    cursor.execute('SELECT fitness, lambda FROM policies_data WHERE policy_id = ?', (policy_id,))
     rows = cursor.fetchall()
     policy = {fitness: lambda_val for fitness, lambda_val in rows}
-    env = tuning_environments.OneMaxEnv(n=n)
+    env = strategies.OneMaxEnv(n=n)
     conn.close()
     return env, policy
 

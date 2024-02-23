@@ -124,20 +124,27 @@ def q_learning_and_save_policy(env, total_episodes, learning_rate, gamma, epsilo
  return q_table
 
 def create_tables(conn):
-  """Create necessary tables in the database, including the new episode_lengths table."""
-  with conn:
-    conn.executescript('''
-      CREATE TABLE IF NOT EXISTS policies_data (policy_id INTEGER, fitness INTEGER, lambda INTEGER);
-      CREATE TABLE IF NOT EXISTS policies_info (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_training_episodes INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
-      CREATE TABLE IF NOT EXISTS episode_lengths (policy_id INTEGER, episode_seed INTEGER, episode_length INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
-    ''')
+    """Create necessary tables in the database."""
+    with conn:
+        conn.executescript('''
+            CREATE TABLE IF NOT EXISTS policies_data (policy_id INTEGER, fitness INTEGER, lambda INTEGER);
+            CREATE TABLE IF NOT EXISTS policies_info (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_training_episodes INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
+            CREATE TABLE IF NOT EXISTS episode_info (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
+            CREATE TABLE IF NOT EXISTS step_info (episode_id INTEGER, step_index INTEGER, fitness INTEGER, FOREIGN KEY(episode_id) REFERENCES episode_info(episode_id));
+        ''')
 
 def save_policy(conn, q_table, episode):
- """Save the policy induced by the Q-table and launch a process for evaluation."""
- policy_id = insert_policy_and_get_id(conn, numpy.argmax(q_table, axis=1))
- insert_policy_info(conn, policy_id, episode)
- process = multiprocessing.Process(target=evaluate_policy, args=(policy_id, config['db_path'], config['n'], config['env_seed']))
- process.start()
+  """Save the policy induced by the Q-table and launch a process for evaluation."""
+  policy_id = insert_policy_and_get_id(conn, numpy.argmax(q_table, axis=1))
+  insert_policy_info(conn, policy_id, episode)
+  process = multiprocessing.Process(target=evaluate_policy, args=(
+      policy_id,
+      config['db_path'],
+      config['n'],
+      config['env_seed'],
+      config['num_evaluation_episodes'],
+  ))
+  process.start()
 
 def insert_policy_and_get_id(conn, policy):
  """Insert policy into policies_data and return the generated policy_id."""
@@ -148,22 +155,32 @@ def insert_policy_and_get_id(conn, policy):
  conn.commit()
  return policy_id
 
-def evaluate_policy(policy_id, db_path, n, env_seed):
-  """Evaluate the policy from the database over multiple episodes and save episode lengths to the database."""
-  conn = sqlite3.connect(db_path)
-  policy = fetch_policy(conn, policy_id)
+# Modify the evaluate_policy function to use episode_info and step_info
+def evaluate_policy(policy_id, db_path, n, env_seed, num_evaluation_episodes):
+    conn = sqlite3.connect(db_path)
+    policy = fetch_policy(conn, policy_id)
 
-  random_state = numpy.random.RandomState(env_seed)
-  env = OneMaxEnv(n=n)
+    random_state = numpy.random.RandomState(env_seed)
+    env = OneMaxEnv(n=n)
 
-  for episode in range(10):
-    episode_seed = random_state.randint(100_000)
-    _, episode_length = evaluate_episode(env, policy, episode_seed)
+    for episode in range(num_evaluation_episodes):
+        episode_seed = random_state.randint(100_000)
+        fitness_values, episode_length = evaluate_episode(env, policy, episode_seed)
 
-    # Save episode length to the database
-    save_episode_length(conn, policy_id, episode_seed, episode_length)
+        # Save episode info to the database
+        cursor = conn.cursor()
+        cursor.execute('INSERT INTO episode_info (policy_id, episode_seed, episode_length) VALUES (?, ?, ?);',
+                       (policy_id, episode_seed, episode_length))
+        episode_id = cursor.lastrowid
 
-  conn.close()
+        # Save step info to the database
+        for step_index, fitness in enumerate(fitness_values):
+            cursor.execute('INSERT INTO step_info (episode_id, step_index, fitness) VALUES (?, ?, ?);',
+                           (episode_id, step_index, int(fitness)))
+
+        conn.commit()
+
+    conn.close()
 
 def save_episode_length(conn, policy_id, episode_seed, episode_length):
   """Insert episode length data into the episode_lengths table."""
@@ -176,7 +193,7 @@ def evaluate_episode(env, policy, episode_seed):
   """Simulate an episode based on the policy and return fitness at each step."""
   state = env.reset(episode_seed)[0]
   done = False
-  fitness_values = []
+  fitness_values = [state]
 
   while not done:
     action = policy[state]
@@ -184,7 +201,7 @@ def evaluate_episode(env, policy, episode_seed):
     state = next_state[0]
     fitness_values.append(state)
 
-  return fitness_values, len(fitness_values)
+  return fitness_values, len(fitness_values) - 1
 
 def fetch_policy(conn, policy_id):
   """Fetch a policy from the database and reconstruct it as a dictionary."""
