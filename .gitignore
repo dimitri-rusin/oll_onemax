@@ -1,6 +1,5 @@
 .conda_environment/
 .env
-logs/
-paper_code/
 data/
+logs/
 traces.csv
