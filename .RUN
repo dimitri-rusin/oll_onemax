@@ -3,4 +3,4 @@
 true
 and conda activate ./.conda_environment
 and rm -rf ppo_data/
-and ipython3 run_ppo.py
+and ipython3 strategies.py
