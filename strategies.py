@@ -6,6 +6,7 @@ import os
 import paper_code.onell_algs
 import sqlite3
 import sys
+import time
 import yaml
 
 config = None
@@ -153,14 +154,25 @@ def insert_special_policy(conn, num_dimensions):
 def insert_policy_and_get_id(conn, policy, policy_id=None):
     """Insert policy into policies_data and return the generated policy_id."""
     cursor = conn.cursor()
-    if policy_id is None:
-        cursor.execute('INSERT INTO policies_info (num_training_episodes) VALUES (?);', (0,))
-        policy_id = cursor.lastrowid
-    else:
-        cursor.execute('INSERT INTO policies_info (policy_id, num_training_episodes) VALUES (?, ?);', (policy_id, 0,))
-    cursor.executemany('INSERT INTO policies_data (policy_id, fitness, lambda) VALUES (?, ?, ?);',
-                       [(policy_id, fitness, int(action)) for fitness, action in enumerate(policy)])
-    conn.commit()
+    retry_count = 0
+    max_retries = 5
+    while True:
+        try:
+            if policy_id is None:
+                cursor.execute('INSERT INTO policies_info (num_training_episodes) VALUES (?);', (0,))
+                policy_id = cursor.lastrowid
+            else:
+                cursor.execute('INSERT INTO policies_info (policy_id, num_training_episodes) VALUES (?, ?);', (policy_id, 0,))
+            cursor.executemany('INSERT INTO policies_data (policy_id, fitness, lambda) VALUES (?, ?, ?);',
+                               [(policy_id, fitness, int(action)) for fitness, action in enumerate(policy)])
+            conn.commit()
+            break
+        except sqlite3.OperationalError as e:
+            if retry_count < max_retries:
+                retry_count += 1
+                time.sleep(1)  # Wait for 1 second before retrying
+            else:
+                raise e
     return policy_id
 
 # Modify the evaluate_policy function to use episode_info and episode_data
