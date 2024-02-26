@@ -78,130 +78,143 @@ class OneMaxOLL(gymnasium.Env):
 
 
 def q_learning_and_save_policy(env, total_episodes, learning_rate, gamma, epsilon, seed, conn, evaluation_interval):
-    """Perform Q-learning, update Q-table, choose actions, save and evaluate policies."""
+  """Perform Q-learning, update Q-table, choose actions, save and evaluate policies."""
 
-    # Initialize a Q-table with zeros
-    q_table = numpy.zeros((env.n, env.n))
+  # Initialize a Q-table with zeros
+  q_table = numpy.zeros((env.n, env.n))
 
-    # Setup random state
-    random_state = numpy.random.RandomState(seed)
+  # Setup random state
+  random_state = numpy.random.RandomState(seed)
 
-    for episode in range(1, total_episodes + 1):
-        print("Training episode", episode)
-        episode_seed = random_state.randint(100_000)
-        state, done = env.reset(episode_seed)[0], False
+  # Save the policy induced by the initial Q-table and launch a process for evaluation
+  policy = [max(1, int(numpy.sqrt(action))) for action in numpy.argmax(q_table, axis=1)]
+  policy_id = insert_policy_and_get_id(conn, policy)
+  insert_policy_info(conn, policy_id, 0)
+  process = multiprocessing.Process(target=evaluate_policy, args=(
+    policy_id,
+    config['db_path'],
+    config['n'],
+    config['env_seed'],
+    config['num_evaluation_episodes'],
+  ))
+  process.start()
 
-        while not done:
-            # Choose an action based on the current state and Q-table
-            action = random_state.randint(env.n) if random_state.random() < epsilon else numpy.argmax(q_table[state])
+  for episode in range(1, total_episodes + 1):
+    print("Training episode", episode)
+    episode_seed = random_state.randint(100_000)
+    state, done = env.reset(episode_seed)[0], False
 
-            # Perform the action
-            next_state, reward, done, _ = env.step(action)
+    while not done:
+      # Choose an action based on the current state and Q-table
+      action = random_state.randint(env.n) if random_state.random() < epsilon else numpy.argmax(q_table[state])
 
-            # Update the Q-table using the Q-learning algorithm
-            q_predict = q_table[state, action]
-            q_target = reward if done else reward + gamma * numpy.max(q_table[next_state[0]])
-            q_table[state, action] += learning_rate * (q_target - q_predict)
+      # Perform the action
+      next_state, reward, done, _ = env.step(action)
 
-            state = next_state[0]
+      # Update the Q-table using the Q-learning algorithm
+      q_predict = q_table[state, action]
+      q_target = reward if done else reward + gamma * numpy.max(q_table[next_state[0]])
+      q_table[state, action] += learning_rate * (q_target - q_predict)
 
-        if episode % evaluation_interval == 0:
-            # Save the policy induced by the Q-table and launch a process for evaluation
-            policy = [max(1, int(numpy.sqrt(action))) for action in numpy.argmax(q_table, axis=1)]
-            policy_id = insert_policy_and_get_id(conn, policy)
-            insert_policy_info(conn, policy_id, episode)
-            process = multiprocessing.Process(target=evaluate_policy, args=(
-                policy_id,
-                config['db_path'],
-                config['n'],
-                config['env_seed'],
-                config['num_evaluation_episodes'],
-            ))
-            process.start()
+      state = next_state[0]
 
-    return q_table
-
-def create_tables(conn):
-    """Create necessary tables in the database."""
-    with conn:
-        conn.executescript('''
-            CREATE TABLE IF NOT EXISTS policies_data (policy_id INTEGER, fitness INTEGER, lambda INTEGER);
-            CREATE TABLE IF NOT EXISTS policies_info (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_training_episodes INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
-            CREATE TABLE IF NOT EXISTS episode_info (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
-        ''')
-
-def save_policy(conn, q_table, episode):
-    """Save the policy induced by the Q-table and launch a process for evaluation."""
-    # Modify the policy to ensure lambda >= 1
-    modified_policy = [max(1, int(numpy.sqrt(action))) for action in numpy.argmax(q_table, axis=1)]
-    policy_id = insert_policy_and_get_id(conn, modified_policy)
-    insert_policy_info(conn, policy_id, episode)
-    process = multiprocessing.Process(target=evaluate_policy, args=(
+    if episode % evaluation_interval == 0:
+      # Save the policy induced by the Q-table and launch a process for evaluation
+      policy = [max(1, int(numpy.sqrt(action))) for action in numpy.argmax(q_table, axis=1)]
+      policy_id = insert_policy_and_get_id(conn, policy)
+      insert_policy_info(conn, policy_id, episode)
+      process = multiprocessing.Process(target=evaluate_policy, args=(
         policy_id,
         config['db_path'],
         config['n'],
         config['env_seed'],
         config['num_evaluation_episodes'],
-    ))
-    process.start()
+      ))
+      process.start()
+
+  return q_table
+
+def create_tables(conn):
+  """Create necessary tables in the database."""
+  with conn:
+    conn.executescript('''
+      CREATE TABLE IF NOT EXISTS policies_data (policy_id INTEGER, fitness INTEGER, lambda INTEGER);
+      CREATE TABLE IF NOT EXISTS policies_info (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_training_episodes INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
+      CREATE TABLE IF NOT EXISTS episode_info (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
+    ''')
+
+def save_policy(conn, q_table, episode):
+  """Save the policy induced by the Q-table and launch a process for evaluation."""
+  # Modify the policy to ensure lambda >= 1
+  modified_policy = [max(1, int(numpy.sqrt(action))) for action in numpy.argmax(q_table, axis=1)]
+  policy_id = insert_policy_and_get_id(conn, modified_policy)
+  insert_policy_info(conn, policy_id, episode)
+  process = multiprocessing.Process(target=evaluate_policy, args=(
+    policy_id,
+    config['db_path'],
+    config['n'],
+    config['env_seed'],
+    config['num_evaluation_episodes'],
+  ))
+  process.start()
 
 def insert_special_policy(conn, num_dimensions):
-    """Insert the special policy with policy_id -1."""
-    policy_lambdas = [int(numpy.sqrt(num_dimensions / (num_dimensions - fitness))) for fitness in range(num_dimensions)]
-    policy_id = -1  # Special policy ID
-    insert_policy_and_get_id(conn, policy_lambdas, policy_id)
+  """Insert the special policy with policy_id -1."""
+  policy_lambdas = [int(numpy.sqrt(num_dimensions / (num_dimensions - fitness))) for fitness in range(num_dimensions)]
+  policy_id = -1  # Special policy ID
+  insert_policy_and_get_id(conn, policy_lambdas, policy_id)
 
 def insert_policy_and_get_id(conn, policy, policy_id=None):
-    """Insert policy into policies_data and return the generated policy_id."""
-    cursor = conn.cursor()
-    retry_count = 0
-    max_retries = 5
-    while True:
-        try:
-            if policy_id is None:
-                cursor.execute('INSERT INTO policies_info (num_training_episodes) VALUES (?);', (0,))
-                policy_id = cursor.lastrowid
-            else:
-                cursor.execute('INSERT INTO policies_info (policy_id, num_training_episodes) VALUES (?, ?);', (policy_id, 0,))
-            cursor.executemany('INSERT INTO policies_data (policy_id, fitness, lambda) VALUES (?, ?, ?);',
-                               [(policy_id, fitness, int(action)) for fitness, action in enumerate(policy)])
-            conn.commit()
-            break
-        except sqlite3.OperationalError as e:
-            if retry_count < max_retries:
-                retry_count += 1
-                time.sleep(1)  # Wait for 1 second before retrying
-            else:
-                raise e
-    return policy_id
+  """Insert policy into policies_data and return the generated policy_id."""
+  cursor = conn.cursor()
+  retry_count = 0
+  max_retries = 5
+  while True:
+    try:
+      if policy_id is None:
+        cursor.execute('INSERT INTO policies_info (num_training_episodes) VALUES (?);', (0,))
+        policy_id = cursor.lastrowid
+      else:
+        cursor.execute('INSERT INTO policies_info (policy_id, num_training_episodes) VALUES (?, ?);', (policy_id, 0,))
+      cursor.executemany('INSERT INTO policies_data (policy_id, fitness, lambda) VALUES (?, ?, ?);',
+                 [(policy_id, fitness, int(action)) for fitness, action in enumerate(policy)])
+      conn.commit()
+      break
+    except sqlite3.OperationalError as e:
+      if retry_count < max_retries:
+        retry_count += 1
+        time.sleep(1)  # Wait for 1 second before retrying
+      else:
+        raise e
+  return policy_id
 
 # Modify the evaluate_policy function to use episode_info and episode_data
 def evaluate_policy(policy_id, db_path, n, env_seed, num_evaluation_episodes):
-    conn = sqlite3.connect(db_path)
-    policy = fetch_policy(conn, policy_id)
+  conn = sqlite3.connect(db_path)
+  policy = fetch_policy(conn, policy_id)
 
-    random_state = numpy.random.RandomState(env_seed)
-    env = OneMaxOLL(n=n)
+  random_state = numpy.random.RandomState(env_seed)
+  env = OneMaxOLL(n=n)
 
-    for episode in range(num_evaluation_episodes):
-        episode_seed = random_state.randint(100_000)
-        episode_length = evaluate_episode(env, policy, episode_seed)
+  for episode in range(num_evaluation_episodes):
+    episode_seed = random_state.randint(100_000)
+    episode_length = evaluate_episode(env, policy, episode_seed)
 
-        # Save episode info to the database
-        cursor = conn.cursor()
-        cursor.execute('INSERT INTO episode_info (policy_id, episode_seed, episode_length) VALUES (?, ?, ?);',
-                       (policy_id, episode_seed, episode_length))
-        episode_id = cursor.lastrowid
+    # Save episode info to the database
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO episode_info (policy_id, episode_seed, episode_length) VALUES (?, ?, ?);',
+             (policy_id, episode_seed, episode_length))
+    episode_id = cursor.lastrowid
 
-        conn.commit()
+    conn.commit()
 
-    conn.close()
+  conn.close()
 
 def save_episode_length(conn, policy_id, episode_seed, episode_length):
   """Insert episode length data into the episode_lengths table."""
   cursor = conn.cursor()
   cursor.execute('INSERT INTO episode_lengths (policy_id, episode_seed, episode_length) VALUES (?, ?, ?);',
-          (policy_id, episode_seed, episode_length))
+      (policy_id, episode_seed, episode_length))
   conn.commit()
 
 def evaluate_episode(env, policy, episode_seed):
@@ -226,11 +239,14 @@ def fetch_policy(conn, policy_id):
   return {fitness: lambda_val for fitness, lambda_val in rows}
 
 def insert_policy_info(conn, policy_id, num_training_episodes):
- """Update policies_info with the number of training episodes."""
- with conn:
-  conn.execute('UPDATE policies_info SET num_training_episodes = ? WHERE policy_id = ?;', (num_training_episodes, policy_id))
+  """Update policies_info with the number of training episodes."""
+  with conn:
+    conn.execute('UPDATE policies_info SET num_training_episodes = ? WHERE policy_id = ?;', (num_training_episodes, policy_id))
 
 def drop_all_tables(db_path):
+
+  if not os.path.exists(db_path): return
+
   """Drop all tables from the database and delete from sqlite_sequence if it exists."""
   with sqlite3.connect(db_path) as conn:
     cursor = conn.cursor()
@@ -247,41 +263,42 @@ def drop_all_tables(db_path):
     cursor.executescript(drop_script)
 
 def main():
-    try:
-        with open(".env.yaml") as file:
-            global config
-            config = yaml.safe_load(file)
-    except FileNotFoundError:
-        print("Error: '.env.yaml' does not exist.", file=sys.stderr)
-        sys.exit(1)
+  try:
+    with open(".env.yaml") as file:
+      global config
+      config = yaml.safe_load(file)
+  except FileNotFoundError:
+    print("Error: '.env.yaml' does not exist.", file=sys.stderr)
+    sys.exit(1)
 
-    setup_config(config)
-    conn = setup_database(config['db_path'])
-    create_tables(conn)
+  setup_config(config)
+  conn = setup_database(config['db_path'])
+  create_tables(conn)
 
-    # Insert and evaluate the special policy
-    insert_special_policy(conn, config['n'])
-    evaluate_policy(-1, config['db_path'], config['n'], config['env_seed'], config['num_evaluation_episodes'])
+  # Insert and evaluate the special policy
+  insert_special_policy(conn, config['n'])
+  evaluate_policy(-1, config['db_path'], config['n'], config['env_seed'], config['num_evaluation_episodes'])
 
-    # Q-learning process
-    env = OneMaxOLL(n=config['n'])
-    q_table = q_learning_and_save_policy(env, config['episodes'], config['learning_rate'], config['gamma'], config['epsilon'], numpy.random.randint(0, 100_000), conn, config['evaluation_interval'])
+  # Q-learning process
+  env = OneMaxOLL(n=config['n'])
+  q_table = q_learning_and_save_policy(env, config['episodes'], config['learning_rate'], config['gamma'], config['epsilon'], numpy.random.randint(0, 100_000), conn, config['evaluation_interval'])
 
-    conn.close()
+  conn.close()
 
 def setup_config(config):
- """Setup global configuration parameters."""
- numpy.random.seed(config['global_seed'])
+  """Setup global configuration parameters."""
+  numpy.random.seed(config['global_seed'])
 
 def setup_database(db_path):
- """Prepare the database, creating necessary directories and tables."""
- drop_all_tables(db_path)
+  """Prepare the database, creating necessary directories and tables."""
+  drop_all_tables(db_path)
 
- directory_path = os.path.dirname(db_path)
- if not os.path.exists(directory_path):
-  os.makedirs(directory_path)
+  directory_path = os.path.dirname(db_path)
+  inspectify.d(directory_path)
+  if not os.path.exists(directory_path):
+    os.makedirs(directory_path)
 
- return sqlite3.connect(db_path)
+  return sqlite3.connect(db_path)
 
 if __name__ == '__main__':
- main()
+  main()
