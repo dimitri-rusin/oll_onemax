@@ -3,11 +3,14 @@ import numpy as np
 import sqlite3
 
 # policy_id   episode_id  episode_seed    episode_length
-# -1  5   65615   22
+# -1  1   38408   59
+
+# policy_id   episode_id  episode_seed    episode_length
+# 15  309 20533   112
 
 n = 50
-policy_id_to_evaluate = -1
-episode_seed = 65615  # Specify the episode seed
+policy_id_to_evaluate = 15
+episode_seed = 20533  # Specify the episode seed
 
 trace_path = 'data/single_evaluation.md'
 trace_file = open(trace_path, 'w')

@@ -67,7 +67,7 @@ class OneMaxOLL(gymnasium.Env):
       self.current_solution = y
 
     num_evaluations_of_this_step = ne1 + ne2
-    reward = -num_evaluations_of_this_step + 10 * (self.current_solution.fitness - prior_fitness)
+    reward = -num_evaluations_of_this_step
     terminated = self.current_solution.is_optimal()
     info = {}
 
@@ -82,6 +82,7 @@ def q_learning_and_save_policy(env, total_episodes, learning_rate, gamma, epsilo
 
   # Initialize a Q-table with zeros
   q_table = numpy.zeros((env.n, env.n))
+  num_q_table_updates = 0
 
   # Setup random state
   random_state = numpy.random.RandomState(seed)
@@ -89,7 +90,7 @@ def q_learning_and_save_policy(env, total_episodes, learning_rate, gamma, epsilo
   # Save the policy induced by the initial Q-table and launch a process for evaluation
   policy = [max(1, int(numpy.sqrt(action))) for action in numpy.argmax(q_table, axis=1)]
   policy_id = insert_policy_and_get_id(conn, policy)
-  insert_policy_info(conn, policy_id, 0)
+  insert_policy_info(conn, policy_id, 0, num_q_table_updates)
   process = multiprocessing.Process(target=evaluate_policy, args=(
     policy_id,
     config['db_path'],
@@ -115,6 +116,7 @@ def q_learning_and_save_policy(env, total_episodes, learning_rate, gamma, epsilo
       q_predict = q_table[state, action]
       q_target = reward if done else reward + gamma * numpy.max(q_table[next_state[0]])
       q_table[state, action] += learning_rate * (q_target - q_predict)
+      num_q_table_updates += 1
 
       state = next_state[0]
 
@@ -122,7 +124,7 @@ def q_learning_and_save_policy(env, total_episodes, learning_rate, gamma, epsilo
       # Save the policy induced by the Q-table and launch a process for evaluation
       policy = [max(1, int(numpy.sqrt(action))) for action in numpy.argmax(q_table, axis=1)]
       policy_id = insert_policy_and_get_id(conn, policy)
-      insert_policy_info(conn, policy_id, episode)
+      insert_policy_info(conn, policy_id, episode, num_q_table_updates)
       process = multiprocessing.Process(target=evaluate_policy, args=(
         policy_id,
         config['db_path'],
@@ -139,24 +141,9 @@ def create_tables(conn):
   with conn:
     conn.executescript('''
       CREATE TABLE IF NOT EXISTS policies_data (policy_id INTEGER, fitness INTEGER, lambda INTEGER);
-      CREATE TABLE IF NOT EXISTS policies_info (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_training_episodes INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
+      CREATE TABLE IF NOT EXISTS policies_info (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_training_episodes INTEGER, num_q_table_updates INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
       CREATE TABLE IF NOT EXISTS episode_info (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
     ''')
-
-def save_policy(conn, q_table, episode):
-  """Save the policy induced by the Q-table and launch a process for evaluation."""
-  # Modify the policy to ensure lambda >= 1
-  modified_policy = [max(1, int(numpy.sqrt(action))) for action in numpy.argmax(q_table, axis=1)]
-  policy_id = insert_policy_and_get_id(conn, modified_policy)
-  insert_policy_info(conn, policy_id, episode)
-  process = multiprocessing.Process(target=evaluate_policy, args=(
-    policy_id,
-    config['db_path'],
-    config['n'],
-    config['env_seed'],
-    config['num_evaluation_episodes'],
-  ))
-  process.start()
 
 def insert_special_policy(conn, num_dimensions):
   """Insert the special policy with policy_id -1."""
@@ -238,10 +225,11 @@ def fetch_policy(conn, policy_id):
   rows = cursor.fetchall()
   return {fitness: lambda_val for fitness, lambda_val in rows}
 
-def insert_policy_info(conn, policy_id, num_training_episodes):
+def insert_policy_info(conn, policy_id, num_training_episodes, num_q_table_updates):
   """Update policies_info with the number of training episodes."""
   with conn:
     conn.execute('UPDATE policies_info SET num_training_episodes = ? WHERE policy_id = ?;', (num_training_episodes, policy_id))
+    conn.execute('UPDATE policies_info SET num_q_table_updates = ? WHERE policy_id = ?;', (num_q_table_updates, policy_id))
 
 def drop_all_tables(db_path):
 
@@ -281,7 +269,17 @@ def main():
 
   # Q-learning process
   env = OneMaxOLL(n=config['n'])
-  q_table = q_learning_and_save_policy(env, config['episodes'], config['learning_rate'], config['gamma'], config['epsilon'], numpy.random.randint(0, 100_000), conn, config['evaluation_interval'])
+  seed = numpy.random.randint(0, 100_000)
+  q_table = q_learning_and_save_policy(
+    env,
+    config['episodes'],
+    config['learning_rate'],
+    config['gamma'],
+    config['epsilon'],
+    seed,
+    conn,
+    config['evaluation_interval'],
+  )
 
   conn.close()
 
