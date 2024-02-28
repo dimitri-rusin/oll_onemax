@@ -1,5 +1,6 @@
 from dash import dcc, html, Input, Output
 import dash
+import inspectify
 import pandas
 import plotly.graph_objs
 import plotly.graph_objs as go
@@ -11,28 +12,38 @@ app = dash.Dash(__name__)
 
 app.title = 'Tuning OLL'
 
-# Extend the App Layout to include the boxplot and interval component
 app.layout = html.Div([
-    dcc.Graph(id='policy-performance-plot'),
-    dcc.Graph(id='episode-length-boxplot'),  # New boxplot graph
-    dcc.Graph(id='fitness-lambda-plot'),
-    dcc.Checklist(
-        id='auto-update-switch',
-        options=[
-            {'label': 'Auto Update Plot Every 5 Seconds', 'value': 'ON'}
-        ],
-        value=[],
-        style={'fontFamily': 'Courier New, monospace', 'color': 'RebeccaPurple'}
-    ),
-    dcc.Interval(
-        id='interval-component',
-        interval=5*1000,  # in milliseconds
-        n_intervals=0
-    )
+    html.Div([
+        dcc.Graph(id='policy-performance-plot'),
+        dcc.Graph(id='fitness-lambda-plot'),
+        dcc.Checklist(
+            id='auto-update-switch',
+            options=[
+                {'label': 'Auto Update Plot Every 5 Seconds', 'value': 'ON'}
+            ],
+            value=[],
+            style={'fontFamily': 'Courier New, monospace', 'color': 'RebeccaPurple'}
+        ),
+        dcc.Interval(
+            id='interval-component',
+            interval=5*1000,  # in milliseconds
+            n_intervals=0
+        )
+    ], style={'display': 'inline-block', 'width': '70%'}),  # Adjust width as needed
+
+    html.Div([
+        dcc.Dropdown(
+            id='xaxis-selector',
+            options=[
+                {'label': 'Number of Training Episodes', 'value': 'num_training_episodes'},
+                {'label': 'Number of Q-Table Updates', 'value': 'num_q_table_updates'}
+            ],
+            value='num_training_episodes',  # Default value
+            style={'width': '100%'}
+        )
+    ], style={'display': 'inline-block', 'width': '25%', 'vertical-align': 'top'}),  # Adjust width and alignment as needed
+
 ], style={'fontFamily': 'Courier New, monospace', 'backgroundColor': 'rgba(0,0,0,0)'})
-
-
-
 
 # Load database path from .env.yaml
 def load_db_path():
@@ -50,15 +61,19 @@ stylish_layout = {
     'gridwidth': 1
 }
 
+# Global variable to store the mapping of policy IDs to their x-values
+policy_id_to_x_values = {}
 
-# Callback for policy performance plot with clickData and interval component
+# Callback for policy performance plot
 @app.callback(
     Output('policy-performance-plot', 'figure'),
     [Input('policy-performance-plot', 'clickData'),
      Input('interval-component', 'n_intervals'),
-     Input('auto-update-switch', 'value')]
+     Input('auto-update-switch', 'value'),
+     Input('xaxis-selector', 'value')]
 )
-def load_policy_performance_data(clickData, n_intervals, auto_update_value):
+def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxis_choice):
+    global policy_id_to_x_values
     # Only update if auto-update is switched on
     if 'ON' not in auto_update_value:
         raise dash.exceptions.PreventUpdate
@@ -67,9 +82,18 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    # Fetch num_training_episodes and policy_id from policies_info for policy_id >= 1
-    cursor.execute('SELECT policy_id, num_training_episodes FROM policies_info WHERE policy_id >= 1')
+    # Modify the SQL query based on the x-axis choice
+    if xaxis_choice == 'num_training_episodes':
+        cursor.execute('SELECT policy_id, num_training_episodes FROM policies_info WHERE policy_id >= 1')
+    else:  # num_q_table_updates
+        cursor.execute('SELECT policy_id, num_q_table_updates FROM policies_info WHERE policy_id >= 1')
+
     training_data = cursor.fetchall()
+
+    # Store the mapping of policy IDs to their x-values
+    policy_id_to_x_values = {policy_id: {'num_training_episodes': episodes, 'num_q_table_updates': updates}
+                             for policy_id, episodes, updates in cursor.execute('SELECT policy_id, num_training_episodes, num_q_table_updates FROM policies_info WHERE policy_id >= 1')}
+
 
     # Calculate average episode length for each policy
     avg_episode_lengths = []
@@ -85,12 +109,20 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value):
     baseline_result = cursor.fetchone()
     baseline_avg_length = baseline_result[0] if baseline_result else 0
 
-    # Check if a point has been clicked
+
+
+    # Determine if a point has been clicked and find the corresponding policy ID
     selected_point = None
     if clickData:
-        selected_x = clickData['points'][0]['x']
-        selected_y = clickData['points'][0]['y']
-        selected_point = go.Scatter(x=[selected_x], y=[selected_y], mode='markers', marker=dict(color='red', size=15), name='Selected Point')
+        point_index = clickData['points'][0]['pointIndex']
+        if point_index in policy_id_to_x_values:
+            policy_id = list(policy_id_to_x_values.keys())[point_index]  # Retrieve policy ID based on point index
+            new_x_value = policy_id_to_x_values[policy_id][xaxis_choice]  # Get new x value based on xaxis choice
+
+            # Create the selected point with the new x value
+            selected_point = go.Scatter(x=[new_x_value], y=[clickData['points'][0]['y']], mode='markers', marker=dict(color='red', size=15), name='Selected Point')
+
+
 
     conn.close()
 
@@ -106,35 +138,43 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value):
         'data': data,
         'layout': go.Layout(
             title='Policy Performance Plot',
-            xaxis=dict(title='Number of Training Episodes', gridcolor=stylish_layout['gridcolor'], gridwidth=stylish_layout['gridwidth']),
-            yaxis=dict(title='Average Episode Length', gridcolor=stylish_layout['gridcolor'], gridwidth=stylish_layout['gridwidth']),
+            xaxis=dict(
+                title=xaxis_choice.replace('_', ' ').title(),
+                gridcolor=stylish_layout['gridcolor'],
+                gridwidth=stylish_layout['gridwidth'],
+                tickformat=',',  # Add thousands separator
+            ),
+            yaxis=dict(
+                title='Average Episode Length',
+                gridcolor=stylish_layout['gridcolor'],
+                gridwidth=stylish_layout['gridwidth'],
+                tickformat=',',  # Add thousands separator
+            ),
             font=stylish_layout['font'],
             paper_bgcolor=stylish_layout['paper_bgcolor'],
             plot_bgcolor=stylish_layout['plot_bgcolor']
         )
     }
 
-
-
-# Callback for fitness-lambda plot
+# Updated callback for fitness-lambda plot
 @app.callback(
     Output('fitness-lambda-plot', 'figure'),
-    [Input('policy-performance-plot', 'clickData')]
+    [Input('policy-performance-plot', 'clickData'),
+     Input('xaxis-selector', 'value')]  # Add the x-axis selector input
 )
-def update_fitness_lambda_plot(clickData):
+def update_fitness_lambda_plot(clickData, xaxis_choice):
+    global policy_id_to_x_values
+
     if clickData:
-        num_training_episodes = clickData['points'][0]['x']  # Extract the number of training episodes
-        db_path = load_db_path()
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
+        point_index = clickData['points'][0]['pointIndex']
+        if point_index in policy_id_to_x_values:
+            policy_id = list(policy_id_to_x_values.keys())[point_index]  # Retrieve policy ID based on point index
 
-        # Find the policy ID corresponding to the clicked number of training episodes
-        cursor.execute('SELECT policy_id FROM policies_info WHERE num_training_episodes = ?', (num_training_episodes,))
-        result = cursor.fetchone()
-        policy_id = result[0] if result else None
+            db_path = load_db_path()
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
 
-        if policy_id is not None:
-            # Fetch fitness-lambda data
+            # Fetch fitness-lambda data for the selected policy
             cursor.execute('SELECT fitness, lambda FROM policies_data WHERE policy_id = ?', (policy_id,))
             fitness_lambda_data = cursor.fetchall()
 
@@ -158,48 +198,9 @@ def update_fitness_lambda_plot(clickData):
                 )
             }
 
-        conn.close()
-
     return {'data': [], 'layout': plotly.graph_objs.Layout(title='Click on a Policy to View Fitness-Lambda Assignment')}
 
-# Callback for the episode length boxplot
-@app.callback(
-    Output('episode-length-boxplot', 'figure'),
-    [Input('policy-performance-plot', 'clickData')]
-)
-def update_episode_length_boxplot(clickData):
-    if clickData:
-        num_training_episodes = clickData['points'][0]['x']
-        db_path = load_db_path()
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
 
-        # Find the policy ID corresponding to the clicked number of training episodes
-        cursor.execute('SELECT policy_id FROM policies_info WHERE num_training_episodes = ?', (num_training_episodes,))
-        result = cursor.fetchone()
-        policy_id = result[0] if result else None
-
-        if policy_id is not None:
-            # Fetch episode lengths for the selected policy
-            cursor.execute('SELECT episode_length FROM episode_info WHERE policy_id = ?', (policy_id,))
-            episode_lengths = cursor.fetchall()
-            episode_lengths = [length[0] for length in episode_lengths]  # Extract lengths from tuples
-
-            conn.close()
-            return {
-                'data': [plotly.graph_objs.Box(y=episode_lengths, boxpoints='all', jitter=0.3, pointpos=-1.8)],
-                'layout': plotly.graph_objs.Layout(
-                    title=f'Episode Lengths Boxplot for Policy {policy_id}',
-                    yaxis=dict(title='Episode Length'),
-                    font=stylish_layout['font'],
-                    paper_bgcolor=stylish_layout['paper_bgcolor'],
-                    plot_bgcolor=stylish_layout['plot_bgcolor']
-                )
-            }
-
-        conn.close()
-
-    return {'data': [], 'layout': plotly.graph_objs.Layout(title='Select a Policy to View Episode Lengths')}
 
 if __name__ == '__main__':
     app.run_server(debug=True)
