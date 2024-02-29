@@ -1,4 +1,5 @@
 from dash import dcc, html, Input, Output
+import math
 import dash
 import inspectify
 import pandas
@@ -6,6 +7,8 @@ import plotly.graph_objs
 import plotly.graph_objs as go
 import sqlite3
 import yaml
+
+config = None
 
 # Dash App Setup
 app = dash.Dash(__name__)
@@ -36,9 +39,9 @@ app.layout = html.Div([
             id='xaxis-selector',
             options=[
                 {'label': 'Number of Training Episodes', 'value': 'num_training_episodes'},
-                {'label': 'Number of Q-Table Updates', 'value': 'num_q_table_updates'}
+                {'label': 'Number of Q-Table Updates', 'value': 'num_q_table_updates'},
             ],
-            value='num_training_episodes',  # Default value
+            value='num_q_table_updates',  # Default value
             style={'width': '100%'}
         )
     ], style={'display': 'inline-block', 'width': '25%', 'vertical-align': 'top'}),  # Adjust width and alignment as needed
@@ -48,6 +51,7 @@ app.layout = html.Div([
 # Load database path from .env.yaml
 def load_db_path():
     with open(".env.yaml") as file:
+        global config
         config = yaml.safe_load(file)
     return config['db_path']
 
@@ -101,12 +105,27 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
 
 
 
-    # Calculate average number of function evaluations for each policy
+    # Calculate average number of function evaluations and standard deviation for each policy
     avg_function_evaluations = []
+    std_dev_evaluations = []
     for policy_id, _ in training_data:
-        cursor.execute('SELECT AVG(num_function_evaluations) FROM episode_info WHERE policy_id = ?', (policy_id,))
-        avg_evaluations = cursor.fetchone()[0]
+        cursor.execute('SELECT num_function_evaluations FROM episode_info WHERE policy_id = ?', (policy_id,))
+        evaluations = [e[0] for e in cursor.fetchall()]
+
+        # Calculate average
+        if evaluations:
+            avg_evaluations = sum(evaluations) / len(evaluations)
+            # Calculate standard deviation
+            std_dev = math.sqrt(sum((e - avg_evaluations) ** 2 for e in evaluations) / len(evaluations))
+        else:
+            avg_evaluations = None
+            std_dev = 0
+
         avg_function_evaluations.append(avg_evaluations if avg_evaluations is not None else 0)
+        std_dev_evaluations.append(std_dev)
+
+
+
 
     policy_ids, num_episodes = zip(*training_data) if training_data else ([], [])
 
@@ -114,8 +133,6 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
     cursor.execute('SELECT AVG(num_function_evaluations) FROM episode_info WHERE policy_id = -1')
     baseline_result = cursor.fetchone()
     baseline_avg_length = baseline_result[0] if baseline_result else 0
-
-
 
     # Determine if a point has been clicked and find the corresponding policy ID
     selected_point = None
@@ -128,13 +145,14 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
             # Create the selected point with the new x value
             selected_point = go.Scatter(x=[new_x_value], y=[clickData['points'][0]['y']], mode='markers', marker=dict(color='red', size=15), name='Selected Point')
 
-
-
     conn.close()
 
+    # Create plots for average FEs and standard deviation
     data = [
-        go.Scatter(x=num_episodes, y=avg_function_evaluations, mode='lines+markers', name='Average Number of Function Evaluations', line=dict(color='blue', width=4)),
-        go.Scatter(x=[min(num_episodes), max(num_episodes)] if num_episodes else [0], y=[baseline_avg_length, baseline_avg_length], mode='lines', name='Baseline Policy', line=dict(color='orange', width=2, dash='dash'))
+        go.Scatter(x=num_episodes, y=avg_function_evaluations, mode='lines+markers', name='#FEs until optimum', line=dict(color='blue', width=4)),
+        go.Scatter(x=num_episodes, y=[avg + std for avg, std in zip(avg_function_evaluations, std_dev_evaluations)], mode='lines', line=dict(color='rgba(173,216,230,0.2)'), name='Upper Bound (Mean + Std. Dev.)'),
+        go.Scatter(x=num_episodes, y=[avg - std for avg, std in zip(avg_function_evaluations, std_dev_evaluations)], mode='lines', fill='tonexty', line=dict(color='rgba(173,216,230,0.2)'), name='Lower Bound (Mean - Std. Dev.)'),
+        go.Scatter(x=[min(num_episodes), max(num_episodes)] if num_episodes else [0], y=[baseline_avg_length, baseline_avg_length], mode='lines', name='Theory: √(𝑛/(𝑛 − 𝑓(𝑥)))', line=dict(color='orange', width=2, dash='dash'))
     ]
 
     if selected_point:
@@ -151,7 +169,7 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
                 tickformat=',',  # Add thousands separator
             ),
             yaxis=dict(
-                title='Average Number of Function Evaluations',  # Updated Y-axis title
+                title='#FEs until optimum',  # Updated Y-axis title
                 gridcolor=stylish_layout['gridcolor'],
                 gridwidth=stylish_layout['gridwidth'],
                 tickformat=',',  # Add thousands separator
