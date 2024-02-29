@@ -32,6 +32,7 @@ class OneMaxOLL(gymnasium.Env):
   def reset(self, episode_seed):
     # Use the provided seed for reproducibility
     self.seed = episode_seed
+    self.num_function_evaluations = 0
     self.random = numpy.random.RandomState(self.seed)
     self.random_number_generator = numpy.random.default_rng(self.seed)
     self.current_solution = paper_code.onell_algs.OneMax(self.n, rng = self.random_number_generator)
@@ -66,10 +67,12 @@ class OneMaxOLL(gymnasium.Env):
     if f_y >= self.current_solution.fitness:
       self.current_solution = y
 
-    num_evaluations_of_this_step = ne1 + ne2
+    num_evaluations_of_this_step = int(ne1 + ne2)
     reward = -num_evaluations_of_this_step
     terminated = self.current_solution.is_optimal()
     info = {}
+
+    self.num_function_evaluations += num_evaluations_of_this_step
 
     return numpy.array([self.current_solution.fitness]), reward, terminated, info
 
@@ -142,7 +145,7 @@ def create_tables(conn):
     conn.executescript('''
       CREATE TABLE IF NOT EXISTS policies_data (policy_id INTEGER, fitness INTEGER, lambda INTEGER);
       CREATE TABLE IF NOT EXISTS policies_info (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_training_episodes INTEGER, num_q_table_updates INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
-      CREATE TABLE IF NOT EXISTS episode_info (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
+      CREATE TABLE IF NOT EXISTS episode_info (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, num_function_evaluations INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
     ''')
 
 def insert_special_policy(conn, num_dimensions):
@@ -189,20 +192,15 @@ def evaluate_policy(policy_id, db_path, n, env_seed, num_evaluation_episodes):
 
     # Save episode info to the database
     cursor = conn.cursor()
-    cursor.execute('INSERT INTO episode_info (policy_id, episode_seed, episode_length) VALUES (?, ?, ?);',
-             (policy_id, episode_seed, episode_length))
+    cursor.execute(
+      'INSERT INTO episode_info (policy_id, episode_seed, episode_length, num_function_evaluations) VALUES (?, ?, ?, ?);',
+      (policy_id, episode_seed, episode_length, int(env.num_function_evaluations)),
+    )
     episode_id = cursor.lastrowid
 
     conn.commit()
 
   conn.close()
-
-def save_episode_length(conn, policy_id, episode_seed, episode_length):
-  """Insert episode length data into the episode_lengths table."""
-  cursor = conn.cursor()
-  cursor.execute('INSERT INTO episode_lengths (policy_id, episode_seed, episode_length) VALUES (?, ?, ?);',
-      (policy_id, episode_seed, episode_length))
-  conn.commit()
 
 def evaluate_episode(env, policy, episode_seed):
   """Simulate an episode based on the policy and return fitness at each step."""
@@ -292,7 +290,6 @@ def setup_database(db_path):
   drop_all_tables(db_path)
 
   directory_path = os.path.dirname(db_path)
-  inspectify.d(directory_path)
   if not os.path.exists(directory_path):
     os.makedirs(directory_path)
 
