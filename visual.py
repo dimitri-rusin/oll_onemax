@@ -64,6 +64,8 @@ stylish_layout = {
 # Global variable to store the mapping of policy IDs to their x-values
 policy_id_to_x_values = {}
 
+
+
 # Callback for policy performance plot
 @app.callback(
     Output('policy-performance-plot', 'figure'),
@@ -82,6 +84,8 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
+
+
     # Modify the SQL query based on the x-axis choice
     if xaxis_choice == 'num_training_episodes':
         cursor.execute('SELECT policy_id, num_training_episodes FROM policies_info WHERE policy_id >= 1')
@@ -95,17 +99,19 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
                              for policy_id, episodes, updates in cursor.execute('SELECT policy_id, num_training_episodes, num_q_table_updates FROM policies_info WHERE policy_id >= 1')}
 
 
-    # Calculate average episode length for each policy
-    avg_episode_lengths = []
+
+
+    # Calculate average number of function evaluations for each policy
+    avg_function_evaluations = []
     for policy_id, _ in training_data:
-        cursor.execute('SELECT AVG(episode_length) FROM episode_info WHERE policy_id = ?', (policy_id,))
-        avg_length = cursor.fetchone()[0]
-        avg_episode_lengths.append(avg_length if avg_length is not None else 0)
+        cursor.execute('SELECT AVG(num_function_evaluations) FROM episode_info WHERE policy_id = ?', (policy_id,))
+        avg_evaluations = cursor.fetchone()[0]
+        avg_function_evaluations.append(avg_evaluations if avg_evaluations is not None else 0)
 
     policy_ids, num_episodes = zip(*training_data) if training_data else ([], [])
 
     # Fetch baseline average episode length
-    cursor.execute('SELECT AVG(episode_length) FROM episode_info WHERE policy_id = -1')
+    cursor.execute('SELECT AVG(num_function_evaluations) FROM episode_info WHERE policy_id = -1')
     baseline_result = cursor.fetchone()
     baseline_avg_length = baseline_result[0] if baseline_result else 0
 
@@ -127,7 +133,7 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
     conn.close()
 
     data = [
-        go.Scatter(x=num_episodes, y=avg_episode_lengths, mode='lines+markers', name='Average Episode Length', line=dict(color='blue', width=4)),
+        go.Scatter(x=num_episodes, y=avg_function_evaluations, mode='lines+markers', name='Average Number of Function Evaluations', line=dict(color='blue', width=4)),
         go.Scatter(x=[min(num_episodes), max(num_episodes)] if num_episodes else [0], y=[baseline_avg_length, baseline_avg_length], mode='lines', name='Baseline Policy', line=dict(color='orange', width=2, dash='dash'))
     ]
 
@@ -145,7 +151,7 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
                 tickformat=',',  # Add thousands separator
             ),
             yaxis=dict(
-                title='Average Episode Length',
+                title='Average Number of Function Evaluations',  # Updated Y-axis title
                 gridcolor=stylish_layout['gridcolor'],
                 gridwidth=stylish_layout['gridwidth'],
                 tickformat=',',  # Add thousands separator
