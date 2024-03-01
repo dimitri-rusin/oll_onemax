@@ -113,7 +113,7 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
         evaluations = [e[0] for e in cursor.fetchall()]
 
         # Calculate average
-        if evaluations:
+        if len(evaluations) >= config['num_evaluation_episodes']:
             avg_evaluations = sum(evaluations) / len(evaluations)
             # Calculate standard deviation
             std_dev = math.sqrt(sum((e - avg_evaluations) ** 2 for e in evaluations) / len(evaluations))
