@@ -184,13 +184,9 @@ def evaluate_policy(policy_id, db_path, n, env_seed, num_evaluation_episodes, nu
 
   # Master process writes results to the database
   with sqlite3.connect(db_path, timeout=10) as conn:
-    for episode_seed, episode_length in zip(episode_seeds, results):
+    for episode_seed, (episode_length, num_function_evaluations) in zip(episode_seeds, results):
       try:
         with conn:  # This automatically handles transactions
-          if env.num_function_evaluations:
-            num_function_evaluations = int(env.num_function_evaluations)
-          else:
-            num_function_evaluations = 0
           cursor = conn.cursor()
           cursor.execute(
             'INSERT INTO episode_info (policy_id, episode_seed, episode_length, num_function_evaluations) VALUES (?, ?, ?, ?);',
@@ -212,7 +208,7 @@ def evaluate_episode(env, policy, episode_seed):
     next_state, _, done, _ = env.step(action)
     state = next_state[0]
 
-  return len(fitness_values) - 1
+  return len(fitness_values) - 1, env.num_function_evaluations
 
 def fetch_policy(conn, policy_id):
   """Fetch a policy from the database and reconstruct it as a dictionary."""
