@@ -156,19 +156,19 @@ def insert_special_policy(conn, num_dimensions):
 
 def insert_policy_and_get_id(conn, policy, policy_id=None):
   """Insert policy into policies_data and return the generated policy_id."""
-  cursor = conn.cursor()
   retry_count = 0
   max_retries = 5
   while True:
     try:
-      if policy_id is None:
-        cursor.execute('INSERT INTO policies_info (num_training_episodes) VALUES (?);', (0,))
-        policy_id = cursor.lastrowid
-      else:
-        cursor.execute('INSERT INTO policies_info (policy_id, num_training_episodes) VALUES (?, ?);', (policy_id, 0,))
-      cursor.executemany('INSERT INTO policies_data (policy_id, fitness, lambda) VALUES (?, ?, ?);',
-                 [(policy_id, fitness, int(action)) for fitness, action in enumerate(policy)])
-      conn.commit()
+      with conn:  # This automatically begins and commits/rollbacks a transaction
+        cursor = conn.cursor()
+        if policy_id is None:
+          cursor.execute('INSERT INTO policies_info (num_training_episodes) VALUES (?);', (0,))
+          policy_id = cursor.lastrowid
+        else:
+          cursor.execute('INSERT INTO policies_info (policy_id, num_training_episodes) VALUES (?, ?);', (policy_id, 0,))
+        cursor.executemany('INSERT INTO policies_data (policy_id, fitness, lambda) VALUES (?, ?, ?);',
+                           [(policy_id, fitness, action) for fitness, action in enumerate(policy)])
       break
     except sqlite3.OperationalError as e:
       if retry_count < max_retries:
@@ -178,29 +178,29 @@ def insert_policy_and_get_id(conn, policy, policy_id=None):
         raise e
   return policy_id
 
-# Modify the evaluate_policy function to use episode_info and episode_data
 def evaluate_policy(policy_id, db_path, n, env_seed, num_evaluation_episodes):
-  conn = sqlite3.connect(db_path)
-  policy = fetch_policy(conn, policy_id)
+  # Open a new connection for each process
+  with sqlite3.connect(db_path, timeout=10) as conn:  # Timeout set to 10 seconds
+    policy = fetch_policy(conn, policy_id)
 
-  random_state = numpy.random.RandomState(env_seed)
-  env = OneMaxOLL(n=n)
+    random_state = numpy.random.RandomState(env_seed)
+    env = OneMaxOLL(n=n)
 
-  for episode in range(num_evaluation_episodes):
-    episode_seed = random_state.randint(100_000)
-    episode_length = evaluate_episode(env, policy, episode_seed)
+    for episode in range(num_evaluation_episodes):
+      episode_seed = random_state.randint(100_000)
+      episode_length = evaluate_episode(env, policy, episode_seed)
 
-    # Save episode info to the database
-    cursor = conn.cursor()
-    cursor.execute(
-      'INSERT INTO episode_info (policy_id, episode_seed, episode_length, num_function_evaluations) VALUES (?, ?, ?, ?);',
-      (policy_id, episode_seed, episode_length, int(env.num_function_evaluations)),
-    )
-    episode_id = cursor.lastrowid
-
-    conn.commit()
-
-  conn.close()
+      # Save episode info to the database within the connection's context
+      try:
+        with conn:  # This automatically handles transactions
+          cursor = conn.cursor()
+          cursor.execute(
+            'INSERT INTO episode_info (policy_id, episode_seed, episode_length, num_function_evaluations) VALUES (?, ?, ?, ?);',
+            (policy_id, episode_seed, episode_length, int(env.num_function_evaluations)),
+          )
+      except sqlite3.OperationalError as e:
+        # Handle database lock error
+        print(f"Database lock error: {e}", file=sys.stderr)
 
 def evaluate_episode(env, policy, episode_seed):
   """Simulate an episode based on the policy and return fitness at each step."""
