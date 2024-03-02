@@ -92,12 +92,12 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
 
   # Modify the SQL query based on the x-axis choice
   x_axis_sql_column = xaxis_choice
-  cursor.execute(f'SELECT policy_id, {x_axis_sql_column} FROM policies_info WHERE policy_id >= 1')
+  cursor.execute(f'SELECT policy_id, {x_axis_sql_column} FROM CONSTRUCTED_POLICIES WHERE policy_id >= 1')
   training_data = cursor.fetchall()
 
   # Update the mapping of policy IDs to their x-values to include num_total_timesteps
   policy_id_to_x_values = {policy_id: {column_name: value for column_name, value in zip(['num_training_episodes', 'num_q_table_updates', 'num_total_timesteps'], row)}
-               for policy_id, *row in cursor.execute('SELECT policy_id, num_training_episodes, num_q_table_updates, num_total_timesteps FROM policies_info WHERE policy_id >= 1')}
+               for policy_id, *row in cursor.execute('SELECT policy_id, num_training_episodes, num_q_table_updates, num_total_timesteps FROM CONSTRUCTED_POLICIES WHERE policy_id >= 1')}
 
 
 
@@ -108,7 +108,7 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
   avg_function_evaluations = []
   std_dev_evaluations = []
   for policy_id, _ in training_data:
-    cursor.execute('SELECT num_function_evaluations FROM episode_info WHERE policy_id = ?', (policy_id,))
+    cursor.execute('SELECT num_function_evaluations FROM EVALUATION_EPISODES WHERE policy_id = ?', (policy_id,))
     evaluations = [e[0] for e in cursor.fetchall()]
 
     # Calculate average
@@ -129,7 +129,7 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
   policy_ids, num_episodes = zip(*training_data) if training_data else ([], [])
 
   # Fetch baseline average episode length
-  cursor.execute('SELECT AVG(num_function_evaluations) FROM episode_info WHERE policy_id = -1')
+  cursor.execute('SELECT AVG(num_function_evaluations) FROM EVALUATION_EPISODES WHERE policy_id = -1')
   baseline_result = cursor.fetchone()
   baseline_avg_length = baseline_result[0] if baseline_result else 0
 
@@ -198,7 +198,7 @@ def update_fitness_lambda_plot(clickData, xaxis_choice):
       cursor = conn.cursor()
 
       # Fetch fitness-lambda data for the selected policy
-      cursor.execute('SELECT fitness, lambda FROM policies_data WHERE policy_id = ?', (policy_id,))
+      cursor.execute('SELECT fitness, lambda_minus_one FROM POLICY_DETAILS WHERE policy_id = ?', (policy_id,))
       fitness_lambda_data = cursor.fetchall()
 
       # Fitness-Lambda plot with connecting lines

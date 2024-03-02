@@ -1,4 +1,5 @@
 import gymnasium
+import onell_algs_rs
 import inspectify
 import numpy
 import os
@@ -75,9 +76,7 @@ class OneMaxOLL(gymnasium.Env):
 
 # ============== ENVIRONMENT - END ==============
 
-def worker_task(episode_seed, policy, env):
-  """Worker function to evaluate a single episode."""
-  return evaluate_episode(env, policy, episode_seed)
+
 
 def q_learning_and_save_policy(total_episodes, learning_rate, gamma, epsilon, seed, conn, evaluation_interval):
   """Perform standard Q-learning, update Q-table, choose actions, save and evaluate policies."""
@@ -133,9 +132,9 @@ def create_tables(conn):
   """Create necessary tables in the database."""
   with conn:
     conn.executescript('''
-      CREATE TABLE IF NOT EXISTS policies_data (policy_id INTEGER, fitness INTEGER, lambda_minus_one INTEGER);
-      CREATE TABLE IF NOT EXISTS policies_info (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_total_timesteps INTEGER, num_training_episodes INTEGER, num_q_table_updates INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
-      CREATE TABLE IF NOT EXISTS episode_info (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, num_function_evaluations INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
+      CREATE TABLE IF NOT EXISTS POLICY_DETAILS (policy_id INTEGER, fitness INTEGER, lambda_minus_one INTEGER);
+      CREATE TABLE IF NOT EXISTS CONSTRUCTED_POLICIES (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_total_timesteps INTEGER, num_training_episodes INTEGER, num_q_table_updates INTEGER, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
+      CREATE TABLE IF NOT EXISTS EVALUATION_EPISODES (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, num_function_evaluations INTEGER, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
     ''')
 
 def insert_special_policy(conn, num_dimensions):
@@ -148,15 +147,15 @@ def insert_special_policy(conn, num_dimensions):
   insert_policy_and_get_id(conn, policy_lambdas, policy_id)
 
 def insert_policy_and_get_id(conn, policy, policy_id=None):
-  """Insert policy into policies_data and return the generated policy_id."""
+  """Insert policy into POLICY_DETAILS and return the generated policy_id."""
   with conn:  # This automatically begins and commits/rollbacks a transaction
     cursor = conn.cursor()
     if policy_id is None:
-      cursor.execute('INSERT INTO policies_info (num_training_episodes) VALUES (?);', (0,))
+      cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_training_episodes) VALUES (?);', (0,))
       policy_id = cursor.lastrowid
     else:
-      cursor.execute('INSERT INTO policies_info (policy_id, num_training_episodes, num_q_table_updates, num_total_timesteps) VALUES (?, ?, ?, ?);', (policy_id, 0, 0, 0))
-    cursor.executemany('INSERT INTO policies_data (policy_id, fitness, lambda_minus_one) VALUES (?, ?, ?);',
+      cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (policy_id, num_training_episodes, num_q_table_updates, num_total_timesteps) VALUES (?, ?, ?, ?);', (policy_id, 0, 0, 0))
+    cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda_minus_one) VALUES (?, ?, ?);',
                        [(policy_id, int(fitness), int(lambda_minus_one)) for fitness, lambda_minus_one in enumerate(policy)])
   return policy_id
 
@@ -171,48 +170,44 @@ def evaluate_policy(policy_id, db_path, n, env_seed, num_evaluation_episodes):
   for episode_index in range(num_evaluation_episodes):
     print(f"Policy {policy_id}: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
     episode_seed = random_state.randint(100_000)
-    episode_length, num_function_evaluations = evaluate_episode(env, policy, episode_seed)
+    num_function_evaluations = evaluate_episode(env, policy, episode_seed)
 
     # Collect episode data
-    episode_data.append((policy_id, episode_seed, episode_length, num_function_evaluations))
+    episode_data.append((policy_id, episode_seed, None, num_function_evaluations))
 
   # Write all collected data to the database in a single transaction
   with sqlite3.connect(db_path, timeout=10) as conn:
     with conn:  # This automatically handles transactions
       cursor = conn.cursor()
       cursor.executemany(
-        'INSERT INTO episode_info (policy_id, episode_seed, episode_length, num_function_evaluations) VALUES (?, ?, ?, ?);',
+        'INSERT INTO EVALUATION_EPISODES (policy_id, episode_seed, episode_length, num_function_evaluations) VALUES (?, ?, ?, ?);',
         episode_data
       )
 
 def evaluate_episode(env, policy, episode_seed):
   """Simulate an episode based on the policy and return fitness at each step."""
-  state = env.reset(episode_seed)[0]
-  done = False
-  fitness_values = []
 
-  while not done:
-    fitness_values.append(state)
-    action = policy[state]
+  policy_list = [policy[fitness] for fitness in policy]
+  for i in range(len(policy_list)):
+    policy_list[i] += 1
 
-    next_state, _, done, _ = env.step(action)
-    state = next_state[0]
+  num_function_evaluations = onell_algs_rs.onell_lambda(config['n'], policy_list, episode_seed, 999_999_999)
 
-  return len(fitness_values) - 1, env.num_function_evaluations
+  return num_function_evaluations
 
 def fetch_policy(conn, policy_id):
   """Fetch a policy from the database and reconstruct it as a dictionary."""
   cursor = conn.cursor()
-  cursor.execute('SELECT fitness, lambda_minus_one FROM policies_data WHERE policy_id = ?', (policy_id,))
+  cursor.execute('SELECT fitness, lambda_minus_one FROM POLICY_DETAILS WHERE policy_id = ?', (policy_id,))
   rows = cursor.fetchall()
   return {fitness: lambda_val for fitness, lambda_val in rows}
 
 def insert_policy_info(conn, policy_id, num_total_timesteps, num_training_episodes, num_q_table_updates):
-  """Update policies_info with the number of training episodes."""
+  """Update CONSTRUCTED_POLICIES with the number of training episodes."""
   with conn:
-    conn.execute('UPDATE policies_info SET num_training_episodes = ? WHERE policy_id = ?;', (num_training_episodes, policy_id))
-    conn.execute('UPDATE policies_info SET num_q_table_updates = ? WHERE policy_id = ?;', (num_q_table_updates, policy_id))
-    conn.execute('UPDATE policies_info SET num_total_timesteps = ? WHERE policy_id = ?;', (num_total_timesteps, policy_id))
+    conn.execute('UPDATE CONSTRUCTED_POLICIES SET num_training_episodes = ? WHERE policy_id = ?;', (num_training_episodes, policy_id))
+    conn.execute('UPDATE CONSTRUCTED_POLICIES SET num_q_table_updates = ? WHERE policy_id = ?;', (num_q_table_updates, policy_id))
+    conn.execute('UPDATE CONSTRUCTED_POLICIES SET num_total_timesteps = ? WHERE policy_id = ?;', (num_total_timesteps, policy_id))
 
 def drop_all_tables(db_path):
 
