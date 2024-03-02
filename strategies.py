@@ -1,6 +1,5 @@
 import gymnasium
-import multiprocessing
-
+import inspectify
 import numpy
 import os
 import paper_code.onell_algs
@@ -29,6 +28,7 @@ class OneMaxOLL(gymnasium.Env):
     assert seed is None
     self.current_solution = None
     self.num_function_evaluations = None
+    self.num_total_timesteps = 0
 
   def reset(self, episode_seed):
     # Use the provided seed for reproducibility
@@ -73,6 +73,7 @@ class OneMaxOLL(gymnasium.Env):
     terminated = self.current_solution.is_optimal()
     info = {}
 
+    self.num_total_timesteps += 1
     self.num_function_evaluations += num_evaluations_of_this_step
 
     return numpy.array([self.current_solution.fitness]), reward, terminated, info
@@ -83,53 +84,51 @@ def worker_task(episode_seed, policy, env):
   """Worker function to evaluate a single episode."""
   return evaluate_episode(env, policy, episode_seed)
 
-def q_learning_and_save_policy(env, total_episodes, learning_rate, gamma, epsilon, seed, conn, evaluation_interval):
-  """Perform Q-learning, update Q-table, choose actions, save and evaluate policies."""
+def q_learning_and_save_policy(total_episodes, learning_rate, gamma, epsilon, seed, conn, evaluation_interval):
+  """Perform standard Q-learning, update Q-table, choose actions, save and evaluate policies."""
+
+  training_environment = OneMaxOLL(n=config['n'])
 
   # Initialize a Q-table with zeros
-  q_table = numpy.zeros((env.n, env.n))
-  num_q_table_updates = 0
+  num_observations = training_environment.observation_space.high[0] - training_environment.observation_space.low[0] + 1
+  q_table = numpy.zeros((num_observations, training_environment.action_space.n))
+
+  policy = numpy.argmax(q_table, axis=1)
+  policy_id = insert_policy_and_get_id(conn, policy)
+  insert_policy_info(conn, policy_id, training_environment.num_total_timesteps, 0, 0)
+  evaluate_policy(policy_id, config['db_path'], config['n'], config['env_seed'], config['num_evaluation_episodes'])
 
   # Setup random state
   random_state = numpy.random.RandomState(seed)
 
-  # Save the policy induced by the initial Q-table and launch a process for evaluation
-  policy = [max(1, int(numpy.sqrt(action))) for action in numpy.argmax(q_table, axis=1)]
-  policy_id = insert_policy_and_get_id(conn, policy)
-  insert_policy_info(conn, policy_id, 0, num_q_table_updates)
-  evaluate_policy(
-    policy_id,
-    config['db_path'],
-    config['n'],
-    config['env_seed'],
-    config['num_evaluation_episodes'],
-  )
-
   for episode in range(1, total_episodes + 1):
     print("Training episode", episode)
     episode_seed = random_state.randint(100_000)
-    state, done = env.reset(episode_seed)[0], False
+    state, done = training_environment.reset(episode_seed)[0], False
 
     while not done:
-      # Choose an action based on the current state and Q-table
-      action = random_state.randint(env.n) if random_state.random() < epsilon else numpy.argmax(q_table[state])
+      # Choose an action based on the current state and Q-table (Epsilon-greedy strategy)
+      if random_state.random() < epsilon:
+        action = random_state.randint(training_environment.action_space.n)
+      else:
+        action = numpy.argmax(q_table[state])
 
       # Perform the action
-      next_state, reward, done, _ = env.step(action)
+      next_state, reward, done, _ = training_environment.step(action)
 
       # Update the Q-table using the Q-learning algorithm
       q_predict = q_table[state, action]
       q_target = reward if done else reward + gamma * numpy.max(q_table[next_state[0]])
       q_table[state, action] += learning_rate * (q_target - q_predict)
-      num_q_table_updates += 1
 
       state = next_state[0]
 
-      if episode % evaluation_interval == 0:
-        policy = [max(1, int(numpy.sqrt(action))) for action in numpy.argmax(q_table, axis=1)]
-        policy_id = insert_policy_and_get_id(conn, policy)
-        insert_policy_info(conn, policy_id, episode, num_q_table_updates)
-        evaluate_policy(policy_id, config['db_path'], config['n'], config['env_seed'], config['num_evaluation_episodes'])
+    # Evaluate policy at specified intervals
+    if episode % evaluation_interval == 0:
+      policy = numpy.argmax(q_table, axis=1)
+      policy_id = insert_policy_and_get_id(conn, policy)
+      insert_policy_info(conn, policy_id, training_environment.num_total_timesteps, episode, 0)
+      evaluate_policy(policy_id, config['db_path'], config['n'], config['env_seed'], config['num_evaluation_episodes'])
 
   return q_table
 
@@ -138,7 +137,7 @@ def create_tables(conn):
   with conn:
     conn.executescript('''
       CREATE TABLE IF NOT EXISTS policies_data (policy_id INTEGER, fitness INTEGER, lambda INTEGER);
-      CREATE TABLE IF NOT EXISTS policies_info (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_training_episodes INTEGER, num_q_table_updates INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
+      CREATE TABLE IF NOT EXISTS policies_info (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_total_timesteps INTEGER, num_training_episodes INTEGER, num_q_table_updates INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
       CREATE TABLE IF NOT EXISTS episode_info (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, num_function_evaluations INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
     ''')
 
@@ -150,55 +149,40 @@ def insert_special_policy(conn, num_dimensions):
 
 def insert_policy_and_get_id(conn, policy, policy_id=None):
   """Insert policy into policies_data and return the generated policy_id."""
-  retry_count = 0
-  max_retries = 5
-  while True:
-    try:
-      with conn:  # This automatically begins and commits/rollbacks a transaction
-        cursor = conn.cursor()
-        if policy_id is None:
-          cursor.execute('INSERT INTO policies_info (num_training_episodes) VALUES (?);', (0,))
-          policy_id = cursor.lastrowid
-        else:
-          cursor.execute('INSERT INTO policies_info (policy_id, num_training_episodes) VALUES (?, ?);', (policy_id, 0,))
-        cursor.executemany('INSERT INTO policies_data (policy_id, fitness, lambda) VALUES (?, ?, ?);',
-                           [(policy_id, fitness, action) for fitness, action in enumerate(policy)])
-      break
-    except sqlite3.OperationalError as e:
-      if retry_count < max_retries:
-        retry_count += 1
-        time.sleep(1)  # Wait for 1 second before retrying
-      else:
-        raise e
+  with conn:  # This automatically begins and commits/rollbacks a transaction
+    cursor = conn.cursor()
+    if policy_id is None:
+      cursor.execute('INSERT INTO policies_info (num_training_episodes) VALUES (?);', (0,))
+      policy_id = cursor.lastrowid
+    else:
+      cursor.execute('INSERT INTO policies_info (policy_id, num_training_episodes, num_q_table_updates, num_total_timesteps) VALUES (?, ?, ?, ?);', (policy_id, 0, 0, 0))
+    cursor.executemany('INSERT INTO policies_data (policy_id, fitness, lambda) VALUES (?, ?, ?);',
+                       [(policy_id, int(fitness), int(action)) for fitness, action in enumerate(policy)])
   return policy_id
 
-def evaluate_policy(policy_id, db_path, n, env_seed, num_evaluation_episodes, num_workers=16):
+def evaluate_policy(policy_id, db_path, n, env_seed, num_evaluation_episodes):
   """Evaluate policy using multiple processes."""
   policy = fetch_policy(sqlite3.connect(db_path), policy_id)
   env = OneMaxOLL(n=n)
 
-  # Create a pool of worker processes
-  with multiprocessing.Pool(num_workers) as pool:
-    episode_seeds = [numpy.random.RandomState(env_seed).randint(100_000) for _ in range(num_evaluation_episodes)]
-    results = pool.starmap(worker_task, [(seed, policy, env) for seed in episode_seeds])
+  random_state = numpy.random.RandomState(env_seed)
+  episode_data = []  # List to store episode data
 
-  # Master process writes results to the database
+  for _ in range(num_evaluation_episodes):
+    episode_seed = random_state.randint(100_000)
+    episode_length, num_function_evaluations = evaluate_episode(env, policy, episode_seed)
+
+    # Collect episode data
+    episode_data.append((policy_id, episode_seed, episode_length, num_function_evaluations))
+
+  # Write all collected data to the database in a single transaction
   with sqlite3.connect(db_path, timeout=10) as conn:
-    for episode_seed, episode_length in zip(episode_seeds, results):
-      try:
-        with conn:  # This automatically handles transactions
-          if env.num_function_evaluations:
-            num_function_evaluations = int(env.num_function_evaluations)
-          else:
-            num_function_evaluations = 0
-          cursor = conn.cursor()
-          cursor.execute(
-            'INSERT INTO episode_info (policy_id, episode_seed, episode_length, num_function_evaluations) VALUES (?, ?, ?, ?);',
-            (policy_id, episode_seed, episode_length, num_function_evaluations),
-          )
-      except sqlite3.OperationalError as e:
-        # Handle database lock error
-        print(f"Database lock error: {e}", file=sys.stderr)
+    with conn:  # This automatically handles transactions
+      cursor = conn.cursor()
+      cursor.executemany(
+        'INSERT INTO episode_info (policy_id, episode_seed, episode_length, num_function_evaluations) VALUES (?, ?, ?, ?);',
+        episode_data
+      )
 
 def evaluate_episode(env, policy, episode_seed):
   """Simulate an episode based on the policy and return fitness at each step."""
@@ -209,10 +193,11 @@ def evaluate_episode(env, policy, episode_seed):
   while not done:
     fitness_values.append(state)
     action = policy[state]
+
     next_state, _, done, _ = env.step(action)
     state = next_state[0]
 
-  return len(fitness_values) - 1
+  return len(fitness_values) - 1, env.num_function_evaluations
 
 def fetch_policy(conn, policy_id):
   """Fetch a policy from the database and reconstruct it as a dictionary."""
@@ -221,11 +206,12 @@ def fetch_policy(conn, policy_id):
   rows = cursor.fetchall()
   return {fitness: lambda_val for fitness, lambda_val in rows}
 
-def insert_policy_info(conn, policy_id, num_training_episodes, num_q_table_updates):
+def insert_policy_info(conn, policy_id, num_total_timesteps, num_training_episodes, num_q_table_updates):
   """Update policies_info with the number of training episodes."""
   with conn:
     conn.execute('UPDATE policies_info SET num_training_episodes = ? WHERE policy_id = ?;', (num_training_episodes, policy_id))
     conn.execute('UPDATE policies_info SET num_q_table_updates = ? WHERE policy_id = ?;', (num_q_table_updates, policy_id))
+    conn.execute('UPDATE policies_info SET num_total_timesteps = ? WHERE policy_id = ?;', (num_total_timesteps, policy_id))
 
 def drop_all_tables(db_path):
 
@@ -264,14 +250,12 @@ def main():
   evaluate_policy(-1, config['db_path'], config['n'], config['env_seed'], config['num_evaluation_episodes'])
 
   # Q-learning process
-  env = OneMaxOLL(n=config['n'])
   seed = numpy.random.randint(0, 100_000)
 
 
 
   # When initializing the database, pass the lock to the q_learning function
   q_table = q_learning_and_save_policy(
-    env,
     config['episodes'],
     config['learning_rate'],
     config['gamma'],
