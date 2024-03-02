@@ -13,3 +13,4 @@ seaborn==0.12.2
 stable_baselines3==2.2.1
 tensorboard==2.15.1
 torch==2.2.0
+maturin===0.13.7

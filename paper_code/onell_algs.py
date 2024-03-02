@@ -465,6 +465,7 @@ def onell_lambda(n, problem=OneMax, seed=None,
     rng = get_default_rng(seed)
 
     x: OneMax = problem(n, rng=rng)   
+    print(x.data)
     f_x = x.fitness
     lbd = lbds[f_x]
     
