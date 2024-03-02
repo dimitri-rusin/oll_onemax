@@ -37,12 +37,7 @@ class OneMaxOLL(gymnasium.Env):
     self.random = numpy.random.RandomState(self.seed)
     self.random_number_generator = numpy.random.default_rng(self.seed)
     self.current_solution = paper_code.onell_algs.OneMax(self.n, rng = self.random_number_generator)
-
-    # Set approximately 85% of the bits to 1
-    num_ones = int(self.n * 0.5)
-    one_positions = self.random.choice(self.n, num_ones, replace=False)
-    self.current_solution.data[one_positions] = True
-    self.current_solution.eval()
+    self.num_function_evaluations += 1 # there is one evaluation [call to .eval()] inside OneMax
 
     return numpy.array([self.current_solution.fitness])
 
@@ -100,6 +95,7 @@ def q_learning_and_save_policy(total_episodes, learning_rate, gamma, epsilon, se
 
   # Setup random state
   random_state = numpy.random.RandomState(seed)
+  num_q_table_updates = 0
 
   for episode in range(1, total_episodes + 1):
     print("Training episode", episode)
@@ -120,6 +116,7 @@ def q_learning_and_save_policy(total_episodes, learning_rate, gamma, epsilon, se
       q_predict = q_table[state, action]
       q_target = reward if done else reward + gamma * numpy.max(q_table[next_state[0]])
       q_table[state, action] += learning_rate * (q_target - q_predict)
+      num_q_table_updates += 1
 
       state = next_state[0]
 
@@ -127,7 +124,7 @@ def q_learning_and_save_policy(total_episodes, learning_rate, gamma, epsilon, se
     if episode % evaluation_interval == 0:
       policy = numpy.argmax(q_table, axis=1)
       policy_id = insert_policy_and_get_id(conn, policy)
-      insert_policy_info(conn, policy_id, training_environment.num_total_timesteps, episode, 0)
+      insert_policy_info(conn, policy_id, training_environment.num_total_timesteps, episode, num_q_table_updates)
       evaluate_policy(policy_id, config['db_path'], config['n'], config['env_seed'], config['num_evaluation_episodes'])
 
   return q_table
@@ -136,14 +133,17 @@ def create_tables(conn):
   """Create necessary tables in the database."""
   with conn:
     conn.executescript('''
-      CREATE TABLE IF NOT EXISTS policies_data (policy_id INTEGER, fitness INTEGER, lambda INTEGER);
+      CREATE TABLE IF NOT EXISTS policies_data (policy_id INTEGER, fitness INTEGER, lambda_minus_one INTEGER);
       CREATE TABLE IF NOT EXISTS policies_info (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_total_timesteps INTEGER, num_training_episodes INTEGER, num_q_table_updates INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
       CREATE TABLE IF NOT EXISTS episode_info (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, num_function_evaluations INTEGER, FOREIGN KEY(policy_id) REFERENCES policies_data(policy_id));
     ''')
 
 def insert_special_policy(conn, num_dimensions):
   """Insert the special policy with policy_id -1."""
-  policy_lambdas = [int(numpy.sqrt(num_dimensions / (num_dimensions - fitness))) for fitness in range(num_dimensions)]
+
+  policy_lambdas = [int(numpy.sqrt(num_dimensions / (num_dimensions - fitness))) - 1 for fitness in range(num_dimensions)]
+  # - 1, because the environment expects lambda - 1.
+
   policy_id = -1  # Special policy ID
   insert_policy_and_get_id(conn, policy_lambdas, policy_id)
 
@@ -156,8 +156,8 @@ def insert_policy_and_get_id(conn, policy, policy_id=None):
       policy_id = cursor.lastrowid
     else:
       cursor.execute('INSERT INTO policies_info (policy_id, num_training_episodes, num_q_table_updates, num_total_timesteps) VALUES (?, ?, ?, ?);', (policy_id, 0, 0, 0))
-    cursor.executemany('INSERT INTO policies_data (policy_id, fitness, lambda) VALUES (?, ?, ?);',
-                       [(policy_id, int(fitness), int(action)) for fitness, action in enumerate(policy)])
+    cursor.executemany('INSERT INTO policies_data (policy_id, fitness, lambda_minus_one) VALUES (?, ?, ?);',
+                       [(policy_id, int(fitness), int(lambda_minus_one)) for fitness, lambda_minus_one in enumerate(policy)])
   return policy_id
 
 def evaluate_policy(policy_id, db_path, n, env_seed, num_evaluation_episodes):
@@ -168,7 +168,8 @@ def evaluate_policy(policy_id, db_path, n, env_seed, num_evaluation_episodes):
   random_state = numpy.random.RandomState(env_seed)
   episode_data = []  # List to store episode data
 
-  for _ in range(num_evaluation_episodes):
+  for episode_index in range(num_evaluation_episodes):
+    print(f"Policy {policy_id}: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
     episode_seed = random_state.randint(100_000)
     episode_length, num_function_evaluations = evaluate_episode(env, policy, episode_seed)
 
@@ -202,7 +203,7 @@ def evaluate_episode(env, policy, episode_seed):
 def fetch_policy(conn, policy_id):
   """Fetch a policy from the database and reconstruct it as a dictionary."""
   cursor = conn.cursor()
-  cursor.execute('SELECT fitness, lambda FROM policies_data WHERE policy_id = ?', (policy_id,))
+  cursor.execute('SELECT fitness, lambda_minus_one FROM policies_data WHERE policy_id = ?', (policy_id,))
   rows = cursor.fetchall()
   return {fitness: lambda_val for fitness, lambda_val in rows}
 
