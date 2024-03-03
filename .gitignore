@@ -3,4 +3,5 @@
 data/
 logs/
 mesu/
+runs/
 traces.csv
