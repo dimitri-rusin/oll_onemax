@@ -8,6 +8,8 @@ import plotly.graph_objs as go
 import sqlite3
 import yaml
 
+# env_yaml_path = '/home/dimitri/code/oll_onemax/runs/.q_learned_50.yaml'
+env_yaml_path = '.env.yaml'
 config = None
 
 # Dash App Setup
@@ -51,7 +53,7 @@ app.layout = html.Div([
 
 # Load database path from .env.yaml
 def load_db_path():
-  with open(".env.yaml") as file:
+  with open(env_yaml_path) as file:
     global config
     config = yaml.safe_load(file)
   return config['db_path']
