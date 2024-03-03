@@ -41,13 +41,6 @@ class OneMaxOLL(gymnasium.Env):
       self.n,
       rng = self.random_number_generator,
     )
-
-    # Set a high portion of bits to 1.
-    num_ones = int(self.n * 0.96)
-    one_positions = self.random.choice(self.n, num_ones, replace=False)
-    self.current_solution.data[one_positions] = True
-    self.current_solution.eval()
-
     self.num_function_evaluations += 1 # there is one evaluation [call to .eval()] inside OneMax
 
     return numpy.array([self.current_solution.fitness])
