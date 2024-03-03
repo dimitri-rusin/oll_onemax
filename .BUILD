@@ -9,6 +9,11 @@ and conda activate ./.conda_environment/
 and pip install --requirement .pip.txt
 
 and cd ./paper_code/onell_algs_rs/
+# curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+# export PATH="$HOME/.cargo/bin:$PATH"
 and maturin build --release
 and cd -
 and pip install --force-reinstall ./paper_code/onell_algs_rs/target/wheels/onell_algs_rs-0.1.0-cp310-cp310-manylinux_2_31_x86_64.whl
+
+and git submodule init
+and git submodule update

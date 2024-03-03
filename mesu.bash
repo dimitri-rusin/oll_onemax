@@ -12,6 +12,6 @@ module add gcc/11.2
 module add git/2.42.0
 module add LLVM/clang-llvm-10.0
 
-export PATH="/scratchbeta/rusind/oll_onemax/.conda_environment/bin:$PATH"
+export PATH="/scratchbeta/rusind/oll/.conda_environment/bin:$PATH"
 
-python /scratchbeta/rusind/oll_onemax/strategies.py
+python /scratchbeta/rusind/oll/strategies.py
