@@ -7,10 +7,12 @@ use std::{
 use bitvec::prelude::*;
 use pyo3::prelude::*;
 use rand::prelude::IteratorRandom;
-use rand::seq::SliceRandom;
 use rand::SeedableRng;
+use rand::seq::SliceRandom;
 use rand_mt::Mt64;
 use statrs::distribution::{Binomial, Discrete};
+use std::fs::File;
+use std::io::Write;
 
 struct FxLog {
     fxs: Vec<u64>,
@@ -246,46 +248,9 @@ fn generation_with_lambda<R: rand::Rng>(x: BitVec, lbd: f64, rng: &mut R) -> (Bi
     generation_full(x, p, n_child, c, n_child, rng)
 }
 
-
-
-
-
-
-// Import File and Write for file operations
-use std::fs::File;
-use std::io::Write;
-
 fn onell_lambda_rs(n: usize, lbds: Vec<f64>, seed: u64, max_evals: NEvals, record_log: bool) -> (NEvals, Option<FxLog>) {
     let mut rng: Mt64 = SeedableRng::seed_from_u64(seed);
     let mut x = random_bits(&mut rng, n);
-
-
-
-    // Open a file in write mode
-    let mut file = match File::create("log.txt") {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln!("Failed to open file: {}", e);
-            // Continue with the rest of the function even if file opening fails
-            // Create a dummy File to satisfy the type requirements
-            File::create("/dev/null").unwrap()
-        },
-    };
-
-    // Convert BitVec to a string representation
-    let x_string = x.iter().map(|bit| if *bit { '1' } else { '0' }).collect::<String>();
-
-    // Write the string representation of x to the file
-    if let Err(e) = writeln!(file, "{}", x_string) {
-        eprintln!("Failed to write to file: {}", e);
-    }
-
-
-
-
-
-
-
     let mut n_evals = NEvals::new();
     let mut logs;
     if record_log {
