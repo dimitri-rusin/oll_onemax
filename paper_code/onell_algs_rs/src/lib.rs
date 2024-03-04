@@ -11,8 +11,6 @@ use rand::SeedableRng;
 use rand::seq::SliceRandom;
 use rand_mt::Mt64;
 use statrs::distribution::{Binomial, Discrete};
-use std::fs::File;
-use std::io::Write;
 
 struct FxLog {
     fxs: Vec<u64>,

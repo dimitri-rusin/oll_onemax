@@ -8,7 +8,8 @@ import plotly.graph_objs as go
 import sqlite3
 import yaml
 
-# env_yaml_path = '/home/dimitri/code/oll_onemax/runs/.q_learned_50.yaml'
+env_yaml_path = '/home/dimitri/code/oll_onemax/runs/q_learned_50/.q_learned_50.yaml'
+env_yaml_path = '/home/dimitri/code/oll_onemax/runs/q_learned_500_almost_optimal/.env.yaml'
 env_yaml_path = '.env.yaml'
 config = None
 
@@ -105,7 +106,6 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
 
 
 
-
   # Calculate average number of function evaluations and standard deviation for each policy
   avg_function_evaluations = []
   std_dev_evaluations = []
@@ -135,6 +135,32 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
   baseline_result = cursor.fetchone()
   baseline_avg_length = baseline_result[0] if baseline_result else 0
 
+
+
+
+
+  # Fetch baseline average episode length
+  cursor.execute('SELECT num_function_evaluations FROM EVALUATION_EPISODES WHERE policy_id = -1')
+  baseline_evaluations = [e[0] for e in cursor.fetchall()]
+  baseline_avg_length = sum(baseline_evaluations) / len(baseline_evaluations) if baseline_evaluations else 0
+
+  # Calculate the variance for baseline evaluations
+  baseline_variance = sum((e - baseline_avg_length) ** 2 for e in baseline_evaluations) / (len(baseline_evaluations) - 1) if len(baseline_evaluations) > 1 else 0
+  baseline_std_dev = math.sqrt(baseline_variance)
+
+  # Calculate upper and lower bounds for the baseline
+  baseline_upper_bound = [baseline_avg_length + baseline_std_dev] * len(num_episodes)
+  baseline_lower_bound = [baseline_avg_length - baseline_std_dev] * len(num_episodes)
+
+
+
+
+
+
+
+
+
+
   # Determine if a point has been clicked and find the corresponding policy ID
   selected_point = None
   if clickData:
@@ -155,6 +181,34 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
     go.Scatter(x=num_episodes, y=[avg - std for avg, std in zip(avg_function_evaluations, std_dev_evaluations)], mode='lines', fill='tonexty', line=dict(color='rgba(173,216,230,0.2)'), name='Lower Bound (Mean - Std. Dev.)'),
     go.Scatter(x=[min(num_episodes), max(num_episodes)] if num_episodes else [0], y=[baseline_avg_length, baseline_avg_length], mode='lines', name='Theory: √(𝑛/(𝑛 − 𝑓(𝑥)))', line=dict(color='orange', width=2, dash='dash'))
   ]
+
+
+  # Add the shadowed variance for the baseline to the plot
+  data.extend([
+      go.Scatter(
+        x=num_episodes,
+        y=baseline_upper_bound,
+        mode='lines',
+        line=dict(color='rgba(255, 165, 0, 0.2)'),  # Semi-transparent orange for upper bound
+        name='Upper Bound (Baseline Variance)'
+      ),
+      go.Scatter(
+        x=num_episodes,
+        y=baseline_lower_bound,
+        mode='lines',
+        fill='tonexty',  # Fill area between this line and the line above
+        line=dict(color='rgba(255, 165, 0, 0.2)'),  # Semi-transparent orange for lower bound
+        name='Lower Bound (Baseline Variance)'
+      )
+  ])
+
+
+
+
+
+
+
+
 
   if selected_point:
     data.append(selected_point)

@@ -1,6 +1,10 @@
 #!/usr/bin/env fish
 
 true
+
+and git submodule init
+and git submodule update
+
 and conda activate base
 and rm -rf ./.conda_environment/
 and rm -rf ./paper_code/onell_algs_rs/target/
@@ -13,7 +17,4 @@ and cd ./paper_code/onell_algs_rs/
 # export PATH="$HOME/.cargo/bin:$PATH"
 and maturin build --release
 and cd -
-and pip install --force-reinstall ./paper_code/onell_algs_rs/target/wheels/onell_algs_rs-0.1.0-cp310-cp310-manylinux_2_31_x86_64.whl
-
-and git submodule init
-and git submodule update
+and find ./paper_code/onell_algs_rs/target/wheels -name "*.whl" -print0 | xargs -0 pip install

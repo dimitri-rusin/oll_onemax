@@ -93,7 +93,7 @@ def q_learning_and_save_policy(total_episodes, learning_rate, gamma, epsilon, se
   policy = numpy.argmax(q_table, axis=1)
   policy_id = insert_policy_and_get_id(conn, policy)
   insert_policy_info(conn, policy_id, training_environment.num_total_timesteps, 0, 0)
-  evaluate_policy(policy_id, config['db_path'], config['n'], config['env_seed'], config['num_evaluation_episodes'])
+  evaluate_policy(policy_id, config['db_path'], config['n'], config['random_seed'], config['num_evaluation_episodes'])
 
   # Setup random state
   random_state = numpy.random.RandomState(seed)
@@ -127,7 +127,7 @@ def q_learning_and_save_policy(total_episodes, learning_rate, gamma, epsilon, se
       policy = numpy.argmax(q_table, axis=1)
       policy_id = insert_policy_and_get_id(conn, policy)
       insert_policy_info(conn, policy_id, training_environment.num_total_timesteps, episode, num_q_table_updates)
-      evaluate_policy(policy_id, config['db_path'], config['n'], config['env_seed'], config['num_evaluation_episodes'])
+      evaluate_policy(policy_id, config['db_path'], config['n'], config['random_seed'], config['num_evaluation_episodes'])
 
   return q_table
 
@@ -162,12 +162,12 @@ def insert_policy_and_get_id(conn, policy, policy_id=None):
                        [(policy_id, int(fitness), int(lambda_minus_one)) for fitness, lambda_minus_one in enumerate(policy)])
   return policy_id
 
-def evaluate_policy(policy_id, db_path, n, env_seed, num_evaluation_episodes):
+def evaluate_policy(policy_id, db_path, n, random_seed, num_evaluation_episodes):
   """Evaluate policy using multiple processes."""
   policy = fetch_policy(sqlite3.connect(db_path), policy_id)
   env = OneMaxOLL(n=n)
 
-  random_state = numpy.random.RandomState(env_seed)
+  random_state = numpy.random.RandomState(random_seed)
   episode_data = []  # List to store episode data
 
   for episode_index in range(num_evaluation_episodes):
@@ -246,7 +246,7 @@ def main():
 
   # Insert and evaluate the special policy
   insert_special_policy(conn, config['n'])
-  evaluate_policy(-1, config['db_path'], config['n'], config['env_seed'], config['num_evaluation_episodes'])
+  evaluate_policy(-1, config['db_path'], config['n'], config['random_seed'], config['num_evaluation_episodes'])
 
   # Q-learning process
   seed = numpy.random.randint(0, 100_000)
@@ -268,7 +268,7 @@ def main():
 
 def setup_config(config):
   """Setup global configuration parameters."""
-  numpy.random.seed(config['global_seed'])
+  numpy.random.seed(config['random_seed'])
 
 def setup_database(db_path):
   """Prepare the database, creating necessary directories and tables."""
