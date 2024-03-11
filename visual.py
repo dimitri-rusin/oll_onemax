@@ -42,10 +42,10 @@ app.layout = html.Div([
       id='xaxis-selector',
       options=[
         {'label': 'Number of Training Episodes', 'value': 'num_training_episodes'},
-        {'label': 'Number of Q-Table Updates', 'value': 'num_q_table_updates'},
+        {'label': 'Number of Total Function Evaluations', 'value': 'num_total_function_evaluations'},
         {'label': 'Number of Total Timesteps', 'value': 'num_total_timesteps'},  # New option added
       ],
-      value='num_total_timesteps',  # Default value
+      value='num_total_function_evaluations',  # Default value
       style={'width': '100%'}
     ),
   ], style={'display': 'inline-block', 'width': '25%', 'vertical-align': 'top'}),  # Adjust width and alignment as needed
@@ -99,8 +99,8 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
   training_data = cursor.fetchall()
 
   # Update the mapping of policy IDs to their x-values to include num_total_timesteps
-  policy_id_to_x_values = {policy_id: {column_name: value for column_name, value in zip(['num_training_episodes', 'num_q_table_updates', 'num_total_timesteps'], row)}
-               for policy_id, *row in cursor.execute('SELECT policy_id, num_training_episodes, num_q_table_updates, num_total_timesteps FROM CONSTRUCTED_POLICIES WHERE policy_id >= 1')}
+  policy_id_to_x_values = {policy_id: {column_name: value for column_name, value in zip(['num_training_episodes', 'num_total_function_evaluations', 'num_total_timesteps'], row)}
+               for policy_id, *row in cursor.execute('SELECT policy_id, num_training_episodes, num_total_function_evaluations, num_total_timesteps FROM CONSTRUCTED_POLICIES WHERE policy_id >= 1')}
 
 
 
@@ -235,36 +235,53 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
     )
   }
 
-# Updated callback for fitness-lambda plot
+
+
+
+
+
+
 @app.callback(
   Output('fitness-lambda-plot', 'figure'),
   [Input('policy-performance-plot', 'clickData'),
-   Input('xaxis-selector', 'value')]  # Add the x-axis selector input
+   Input('xaxis-selector', 'value')]
 )
 def update_fitness_lambda_plot(clickData, xaxis_choice):
   global policy_id_to_x_values
 
+  db_path = load_db_path()
+  conn = sqlite3.connect(db_path)
+  cursor = conn.cursor()
+
+  # Fetch baseline fitness-lambda data (policy_id = -1)
+  cursor.execute('SELECT fitness, lambda_minus_one FROM POLICY_DETAILS WHERE policy_id = -1')
+  baseline_fitness_lambda_data = cursor.fetchall()
+
+  baseline_curve = plotly.graph_objs.Scatter(
+      x=[d[0] for d in baseline_fitness_lambda_data],
+      y=[d[1] + 1 for d in baseline_fitness_lambda_data],
+      mode='lines+markers',
+      name='Baseline Fitness-Lambda',
+      line=dict(color='orange', width=4)
+  )
+
+  # Data for the selected policy
+  selected_policy_curve = {'data': [], 'layout': {}}
   if clickData:
     point_index = clickData['points'][0]['pointIndex']
     if point_index in policy_id_to_x_values:
-      policy_id = list(policy_id_to_x_values.keys())[point_index]  # Retrieve policy ID based on point index
-
-      db_path = load_db_path()
-      conn = sqlite3.connect(db_path)
-      cursor = conn.cursor()
+      policy_id = list(policy_id_to_x_values.keys())[point_index]
 
       # Fetch fitness-lambda data for the selected policy
       cursor.execute('SELECT fitness, lambda_minus_one FROM POLICY_DETAILS WHERE policy_id = ?', (policy_id,))
       fitness_lambda_data = cursor.fetchall()
 
-      # Fitness-Lambda plot with connecting lines
-      conn.close()
-      return {
+      selected_policy_curve = {
         'data': [plotly.graph_objs.Scatter(
           x=[d[0] for d in fitness_lambda_data],
-          y=[d[1] + 1 for d in fitness_lambda_data], # + 1, because we save the lambda - 1 value, but present here the lambda
+          y=[d[1] + 1 for d in fitness_lambda_data],
           mode='lines+markers',
-          name='Fitness-Lambda',
+          name=f'Fitness-Lambda Policy {policy_id}',
           line=dict(color='blue', width=4)
         )],
         'layout': plotly.graph_objs.Layout(
@@ -277,7 +294,34 @@ def update_fitness_lambda_plot(clickData, xaxis_choice):
         )
       }
 
-  return {'data': [], 'layout': plotly.graph_objs.Layout(title='Click on a Policy to View Fitness-Lambda Assignment')}
+  conn.close()
+
+  # Combine data from selected policy and baseline
+  all_data = [baseline_curve] + selected_policy_curve['data']
+
+  # Use layout from selected policy curve if it exists, else use default
+  layout = selected_policy_curve['layout'] if selected_policy_curve['data'] else {
+      'title': 'Fitness-Lambda Assignment',
+      'xaxis': {'title': 'Fitness'},
+      'yaxis': {'title': 'Lambda'},
+      'font': stylish_layout['font'],
+      'paper_bgcolor': stylish_layout['paper_bgcolor'],
+      'plot_bgcolor': stylish_layout['plot_bgcolor']
+  }
+
+  return {'data': all_data, 'layout': layout}
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

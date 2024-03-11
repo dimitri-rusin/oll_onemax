@@ -30,6 +30,7 @@ class OneMaxOLL(gymnasium.Env):
     self.current_solution = None
     self.num_function_evaluations = None
     self.num_total_timesteps = 0
+    self.num_total_function_evaluations = 0
 
   def reset(self, episode_seed):
     # Use the provided seed for reproducibility
@@ -72,8 +73,9 @@ class OneMaxOLL(gymnasium.Env):
     terminated = self.current_solution.is_optimal()
     info = {}
 
-    self.num_total_timesteps += 1
     self.num_function_evaluations += num_evaluations_of_this_step
+    self.num_total_function_evaluations += num_evaluations_of_this_step
+    self.num_total_timesteps += 1
 
     return numpy.array([self.current_solution.fitness]), reward, terminated, info
 
@@ -92,41 +94,61 @@ def q_learning_and_save_policy(total_episodes, learning_rate, gamma, epsilon, se
 
   policy = numpy.argmax(q_table, axis=1)
   policy_id = insert_policy_and_get_id(conn, policy)
-  insert_policy_info(conn, policy_id, training_environment.num_total_timesteps, 0, 0)
+  insert_policy_info(conn, policy_id, training_environment.num_total_timesteps, 0, training_environment.num_total_function_evaluations, 0, 0)
   evaluate_policy(policy_id, config['db_path'], config['n'], config['random_seed'], config['num_evaluation_episodes'])
 
   # Setup random state
   random_state = numpy.random.RandomState(seed)
   num_q_table_updates = 0
 
-  for episode in range(1, total_episodes + 1):
-    print("Training episode", episode)
+  sum_initial_fitness = 0
+  sum_squares_initial_fitness = 0
+
+  for episode_index in range(1, total_episodes + 1):
+    print("Training episode", episode_index)
     episode_seed = random_state.randint(100_000)
-    state, done = training_environment.reset(episode_seed)[0], False
+    fitness, done = training_environment.reset(episode_seed)[0], False
+
+    # Update sum and sum of squares for initial fitness
+    sum_initial_fitness += fitness
+    sum_squares_initial_fitness += fitness ** 2
 
     while not done:
-      # Choose an action based on the current state and Q-table (Epsilon-greedy strategy)
+      # Choose an action based on the current fitness and Q-table (Epsilon-greedy strategy)
       if random_state.random() < epsilon:
         action = random_state.randint(training_environment.action_space.n)
       else:
-        action = numpy.argmax(q_table[state])
+        action = numpy.argmax(q_table[fitness])
 
       # Perform the action
-      next_state, reward, done, _ = training_environment.step(action)
+      next_fitness, reward, done, _ = training_environment.step(action)
 
       # Update the Q-table using the Q-learning algorithm
-      q_predict = q_table[state, action]
-      q_target = reward if done else reward + gamma * numpy.max(q_table[next_state[0]])
-      q_table[state, action] += learning_rate * (q_target - q_predict)
+      q_predict = q_table[fitness, action]
+      q_target = reward if done else reward + gamma * numpy.max(q_table[next_fitness[0]])
+      q_table[fitness, action] += learning_rate * (q_target - q_predict)
       num_q_table_updates += 1
 
-      state = next_state[0]
+      fitness = next_fitness[0]
 
     # Evaluate policy at specified intervals
-    if episode % evaluation_interval == 0:
+    if episode_index % evaluation_interval == 0:
+
+      # Calculating mean and variance
+      mean_initial_fitness = sum_initial_fitness / episode_index
+      variance_initial_fitness = (sum_squares_initial_fitness / episode_index) - (mean_initial_fitness ** 2)
+
       policy = numpy.argmax(q_table, axis=1)
       policy_id = insert_policy_and_get_id(conn, policy)
-      insert_policy_info(conn, policy_id, training_environment.num_total_timesteps, episode, num_q_table_updates)
+      insert_policy_info(
+        conn,
+        policy_id,
+        training_environment.num_total_timesteps,
+        episode_index,
+        training_environment.num_total_function_evaluations,
+        mean_initial_fitness,
+        variance_initial_fitness,
+      )
       evaluate_policy(policy_id, config['db_path'], config['n'], config['random_seed'], config['num_evaluation_episodes'])
 
   return q_table
@@ -136,7 +158,7 @@ def create_tables(conn):
   with conn:
     conn.executescript('''
       CREATE TABLE IF NOT EXISTS POLICY_DETAILS (policy_id INTEGER, fitness INTEGER, lambda_minus_one INTEGER);
-      CREATE TABLE IF NOT EXISTS CONSTRUCTED_POLICIES (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_total_timesteps INTEGER, num_training_episodes INTEGER, num_q_table_updates INTEGER, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
+      CREATE TABLE IF NOT EXISTS CONSTRUCTED_POLICIES (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_total_timesteps INTEGER, num_training_episodes INTEGER, num_total_function_evaluations INTEGER, mean_initial_fitness DOUBLE, variance_initial_fitness DOUBLE, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
       CREATE TABLE IF NOT EXISTS EVALUATION_EPISODES (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, num_function_evaluations INTEGER, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
     ''')
 
@@ -157,7 +179,7 @@ def insert_policy_and_get_id(conn, policy, policy_id=None):
       cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_training_episodes) VALUES (?);', (0,))
       policy_id = cursor.lastrowid
     else:
-      cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (policy_id, num_training_episodes, num_q_table_updates, num_total_timesteps) VALUES (?, ?, ?, ?);', (policy_id, 0, 0, 0))
+      cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (policy_id, num_total_timesteps, num_training_episodes, num_total_function_evaluations, mean_initial_fitness, variance_initial_fitness) VALUES (?, ?, ?, ?, ?, ?);', (policy_id, 0, 0, 0, 0, 0))
     cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda_minus_one) VALUES (?, ?, ?);',
                        [(policy_id, int(fitness), int(lambda_minus_one)) for fitness, lambda_minus_one in enumerate(policy)])
   return policy_id
@@ -165,7 +187,6 @@ def insert_policy_and_get_id(conn, policy, policy_id=None):
 def evaluate_policy(policy_id, db_path, n, random_seed, num_evaluation_episodes):
   """Evaluate policy using multiple processes."""
   policy = fetch_policy(sqlite3.connect(db_path), policy_id)
-  env = OneMaxOLL(n=n)
 
   random_state = numpy.random.RandomState(random_seed)
   episode_data = []  # List to store episode data
@@ -173,7 +194,7 @@ def evaluate_policy(policy_id, db_path, n, random_seed, num_evaluation_episodes)
   for episode_index in range(num_evaluation_episodes):
     print(f"Policy {policy_id}: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
     episode_seed = random_state.randint(100_000)
-    num_function_evaluations = evaluate_episode(env, policy, episode_seed)
+    num_function_evaluations = evaluate_episode(policy, episode_seed)
 
     # Collect episode data
     episode_data.append((policy_id, episode_seed, None, num_function_evaluations))
@@ -187,7 +208,7 @@ def evaluate_policy(policy_id, db_path, n, random_seed, num_evaluation_episodes)
         episode_data
       )
 
-def evaluate_episode(env, policy, episode_seed):
+def evaluate_episode(policy, episode_seed):
   """Simulate an episode based on the policy and return fitness at each step."""
 
   policy_list = [policy[fitness] for fitness in policy]
@@ -205,12 +226,13 @@ def fetch_policy(conn, policy_id):
   rows = cursor.fetchall()
   return {fitness: lambda_val for fitness, lambda_val in rows}
 
-def insert_policy_info(conn, policy_id, num_total_timesteps, num_training_episodes, num_q_table_updates):
-  """Update CONSTRUCTED_POLICIES with the number of training episodes."""
+def insert_policy_info(conn, policy_id, num_total_timesteps, num_training_episodes, num_total_function_evaluations, mean_initial_fitness, variance_initial_fitness):
   with conn:
     conn.execute('UPDATE CONSTRUCTED_POLICIES SET num_training_episodes = ? WHERE policy_id = ?;', (num_training_episodes, policy_id))
-    conn.execute('UPDATE CONSTRUCTED_POLICIES SET num_q_table_updates = ? WHERE policy_id = ?;', (num_q_table_updates, policy_id))
+    conn.execute('UPDATE CONSTRUCTED_POLICIES SET num_total_function_evaluations = ? WHERE policy_id = ?;', (num_total_function_evaluations, policy_id))
     conn.execute('UPDATE CONSTRUCTED_POLICIES SET num_total_timesteps = ? WHERE policy_id = ?;', (num_total_timesteps, policy_id))
+    conn.execute('UPDATE CONSTRUCTED_POLICIES SET mean_initial_fitness = ? WHERE policy_id = ?;', (mean_initial_fitness, policy_id))
+    conn.execute('UPDATE CONSTRUCTED_POLICIES SET variance_initial_fitness = ? WHERE policy_id = ?;', (variance_initial_fitness, policy_id))
 
 def drop_all_tables(db_path):
 
