@@ -23,5 +23,5 @@ source "$conda_sh_path"
 
 
 conda activate ./.conda_environment
-rm -rf ppo_data/
+rm -rf data/
 ipython3 strategies.py
