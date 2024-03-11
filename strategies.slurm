@@ -31,6 +31,6 @@ source "$conda_sh_path"
 
 
 
-cd $SLURM_SUBMIT_DIR
+cd /work/sc122/sc122/dimitri_rusin/oll_onemax/
 conda activate ./.conda_environment
 python strategies.py
