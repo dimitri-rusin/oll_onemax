@@ -1,7 +1,6 @@
 #!/bin/bash
 
 #SBATCH --account=sc122-dimitri
-#SBATCH --array=200-659
 #SBATCH --cpus-per-task=1
 #SBATCH --nodes=1
 #SBATCH --partition=standard
@@ -32,6 +31,6 @@ source "$conda_sh_path"
 
 
 
+cd $SLURM_SUBMIT_DIR
 conda activate ./.conda_environment
-
 python strategies.py
