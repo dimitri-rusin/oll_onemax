@@ -7,7 +7,7 @@
 #SBATCH --partition=standard
 #SBATCH --qos=standard
 #SBATCH --tasks-per-node=1
-#SBATCH --time=00:01:00
+#SBATCH --time=00:02:00
 
 module load anaconda/python3
 
@@ -31,8 +31,6 @@ echo "Sourcing: $conda_sh_path"
 source "$conda_sh_path"
 
 
-
-cd /work/sc122/sc122/dimitri_rusin/oll_onemax/
 
 conda activate ./.conda_environment
 
