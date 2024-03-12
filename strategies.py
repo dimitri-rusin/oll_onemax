@@ -104,6 +104,8 @@ def q_learning_and_save_policy(total_episodes, learning_rate, gamma, epsilon, se
   sum_initial_fitness = 0
   sum_squares_initial_fitness = 0
 
+  num_training_timesteps = 0
+
   for episode_index in range(1, total_episodes + 1):
     print("Training episode", episode_index)
     episode_seed = random_state.randint(100_000)
@@ -122,6 +124,7 @@ def q_learning_and_save_policy(total_episodes, learning_rate, gamma, epsilon, se
 
       # Perform the action
       next_fitness, reward, done, _ = training_environment.step(action)
+      num_training_timesteps += 1
 
       # Update the Q-table using the Q-learning algorithm
       q_predict = q_table[fitness, action]
@@ -150,6 +153,9 @@ def q_learning_and_save_policy(total_episodes, learning_rate, gamma, epsilon, se
         variance_initial_fitness,
       )
       evaluate_policy(policy_id, config['db_path'], config['n'], config['random_seed'], config['num_evaluation_episodes'])
+
+    if num_training_timesteps >= config['num_training_timesteps']:
+      break
 
   return q_table
 
