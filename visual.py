@@ -1,56 +1,117 @@
-from dash import dcc, html, Input, Output
-import math
-import dash
+from dash import dcc, html, dash_table
 import inspectify
+from dash.dependencies import Input, Output, State
+import dash
+import math
 import pandas
-import plotly.graph_objs
 import plotly.graph_objs as go
+import plotly
 import sqlite3
 import yaml
 
-env_yaml_path = '/home/dimitri/code/oll_onemax/runs/q_learned_50/.q_learned_50.yaml'
-env_yaml_path = '/home/dimitri/code/oll_onemax/runs/q_learned_500_almost_optimal/.env.yaml'
 env_yaml_path = '.env.yaml'
 config = None
 
-# Dash App Setup
 app = dash.Dash(__name__)
-
 app.title = 'Tuning OLL'
 
-app.layout = html.Div([
-  html.Div([
-    dcc.Graph(id='policy-performance-plot'),
-    dcc.Graph(id='fitness-lambda-plot'),
-    dcc.Checklist(
-      id='auto-update-switch',
-      options=[
-        {'label': 'Auto Update Plot Every 5 Seconds', 'value': 'ON'}
-      ],
-      value=['ON'],  # Default value set to 'ON'
-      style={'fontFamily': 'Courier New, monospace', 'color': 'RebeccaPurple'}
-    ),
-    dcc.Interval(
-      id='interval-component',
-      interval=5*1000,  # in milliseconds
-      n_intervals=0
-    )
-  ], style={'display': 'inline-block', 'width': '70%'}),  # Adjust width as needed
+def load_config_data():
+    with open(env_yaml_path) as file:
+        config = yaml.safe_load(file)
 
-  html.Div([
-    dcc.Dropdown(
-      id='xaxis-selector',
-      options=[
-        {'label': 'Number of Training Episodes', 'value': 'num_training_episodes'},
-        {'label': 'Number of Total Function Evaluations', 'value': 'num_total_function_evaluations'},
-        {'label': 'Number of Total Timesteps', 'value': 'num_total_timesteps'},  # New option added
-      ],
-      value='num_total_function_evaluations',  # Default value
-      style={'width': '100%'}
+        # Function to format value
+        def format_value(value):
+            if isinstance(value, int) or isinstance(value, float):
+                return f"{value:,}"  # Format numbers with commas
+            return str(value)  # Convert other types to string
+
+        return [{"Key": k, "Value": format_value(v)} for k, v in config.items()]
+
+config_data = load_config_data()
+
+app.layout = html.Div([
+    html.Div([
+        dcc.Graph(id='policy-performance-plot'),
+        dcc.Graph(id='fitness-lambda-plot'),
+        dcc.Checklist(
+            id='auto-update-switch',
+            options=[
+                {'label': 'Auto Update Plot Every 5 Seconds', 'value': 'ON'}
+            ],
+            value=['ON'],
+            style={'fontFamily': 'Courier New, monospace', 'color': 'RebeccaPurple'}
+        ),
+        dcc.Interval(
+            id='interval-component',
+            interval=5*1000,
+            n_intervals=0
+        )
+    ], style={'display': 'inline-block', 'width': '70%'}),
+
+    html.Div([
+        dcc.Dropdown(
+            id='xaxis-selector',
+            options=[
+                {'label': 'Number of Training Episodes', 'value': 'num_training_episodes'},
+                {'label': 'Number of Total Function Evaluations', 'value': 'num_total_function_evaluations'},
+                {'label': 'Number of Total Timesteps', 'value': 'num_total_timesteps'},
+            ],
+            value='num_total_function_evaluations',
+            style={'width': '100%'}
+        ),
+    ], style={'display': 'inline-block', 'width': '25%', 'vertical-align': 'top'}),
+
+    # DataTable for displaying config key-value pairs below the Fitness-Lambda plot
+    dash_table.DataTable(
+        id='config-table',
+        columns=[{"name": i, "id": i} for i in ['Key', 'Value']],
+        data=config_data,
+        style_cell={'textAlign': 'left'},
+        style_header={
+            'backgroundColor': 'white',
+            'fontWeight': 'bold'
+        }
     ),
-  ], style={'display': 'inline-block', 'width': '25%', 'vertical-align': 'top'}),  # Adjust width and alignment as needed
+
+
 
 ], style={'fontFamily': 'Courier New, monospace', 'backgroundColor': 'rgba(0,0,0,0)'})
+
+
+
+
+
+
+
+@app.callback(
+    Output('config-table', 'data'),
+    [Input('policy-performance-plot', 'clickData')]
+)
+def update_config_table(clickData):
+    if clickData is None:
+        raise dash.exceptions.PreventUpdate
+
+    # Extracting x and y values from the clicked point
+    x_value = clickData['points'][0]['x']
+    y_value = clickData['points'][0]['y']
+
+    inspectify.d(f"{x_value:,}")
+    inspectify.d(f"{y_value:,}")
+
+    # You can format these values and add them to your config data
+    updated_config_data = config_data.copy()  # Assuming config_data is your original data
+    updated_config_data.append({'Key': 'Selected Policy X Value', 'Value': f"{x_value:,}"})
+    updated_config_data.append({'Key': 'Selected Policy Y Value', 'Value': f"{y_value:,}"})
+
+    return updated_config_data
+
+
+
+
+
+
+
+
 
 # Load database path from .env.yaml
 def load_db_path():
@@ -71,6 +132,11 @@ stylish_layout = {
 
 # Global variable to store the mapping of policy IDs to their x-values
 policy_id_to_x_values = {}
+
+
+
+
+
 
 
 # Updated Callback for policy performance plot
@@ -159,18 +225,25 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
 
 
 
-
+  data = []
 
   # Determine if a point has been clicked and find the corresponding policy ID
   selected_point = None
   if clickData:
     point_index = clickData['points'][0]['pointIndex']
+    # Check if the point index exists in policy_id_to_x_values
     if point_index in policy_id_to_x_values:
       policy_id = list(policy_id_to_x_values.keys())[point_index]  # Retrieve policy ID based on point index
       new_x_value = policy_id_to_x_values[policy_id][xaxis_choice]  # Get new x value based on xaxis choice
 
       # Create the selected point with the new x value
-      selected_point = go.Scatter(x=[new_x_value], y=[clickData['points'][0]['y']], mode='markers', marker=dict(color='red', size=15), name='Selected Point')
+      selected_point = go.Scatter(
+        x=[new_x_value],
+        y=[clickData['points'][0]['y']],
+        mode='markers',
+        marker=dict(color='red', size=15),
+        name='Selected Point'
+      )
 
   conn.close()
 
@@ -202,14 +275,6 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
       )
   ])
 
-
-
-
-
-
-
-
-
   if selected_point:
     data.append(selected_point)
 
@@ -234,10 +299,6 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
       plot_bgcolor=stylish_layout['plot_bgcolor']
     )
   }
-
-
-
-
 
 
 
