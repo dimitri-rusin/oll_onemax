@@ -3,6 +3,8 @@
 # Exit immediately on errors, treat unset variables as an error, and fail on error in any pipeline
 set -euo pipefail
 
+
+
 # Dynamically find the Conda executable path
 conda_path=$(which conda)
 
@@ -23,5 +25,5 @@ source "$conda_sh_path"
 
 
 conda activate ./.conda_environment
-rm -rf data/
-ipython3 strategies.py
+source <(python yaml2env.py dim_50.yaml)
+python strategies.py
