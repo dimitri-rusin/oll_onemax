@@ -122,15 +122,16 @@ app.layout = html.Div([
 
 
 
-
-
+def did_we_click_the_mean_policy_curve(clickData):
+  # This value is 0, only because we insert the policy curve at the first position of the data list below.
+  return clickData['points'][0]['curveNumber'] == 0
 
 @app.callback(
     Output('config-table', 'data'),
     [Input('policy-performance-plot', 'clickData')]
 )
 def update_config_table(clickData):
-    if clickData is None:
+    if clickData is None or not did_we_click_the_mean_policy_curve(clickData):
         raise dash.exceptions.PreventUpdate
 
     # Extracting x and y values from the clicked point
@@ -190,6 +191,9 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
   # Only update if auto-update is switched on
   if 'ON' not in auto_update_value:
     raise dash.exceptions.PreventUpdate
+
+
+
 
   db_path = load_db_path()
   conn = sqlite3.connect(db_path)
@@ -257,7 +261,7 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
 
   # Determine if a point has been clicked and find the corresponding policy ID
   selected_point = None
-  if clickData:
+  if clickData and did_we_click_the_mean_policy_curve(clickData):
     point_index = clickData['points'][0]['pointIndex']
     # Check if the point index exists in policy_id_to_x_values
     policy_id = list(policy_id_to_x_values.keys())[point_index]  # Retrieve policy ID based on point index
@@ -303,8 +307,6 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
       )
   ])
 
-  inspectify.d(clickData)
-  inspectify.d(selected_point)
   if selected_point:
     data.append(selected_point)
 
@@ -358,7 +360,7 @@ def update_fitness_lambda_plot(clickData, xaxis_choice):
 
   # Data for the selected policy
   selected_policy_curve = {'data': [], 'layout': {}}
-  if clickData:
+  if clickData and did_we_click_the_mean_policy_curve(clickData):
     point_index = clickData['points'][0]['pointIndex']
     policy_id = list(policy_id_to_x_values.keys())[point_index]
     if policy_id in policy_id_to_x_values:
