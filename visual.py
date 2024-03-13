@@ -1,4 +1,5 @@
 from dash import dcc, html, dash_table
+import os
 import inspectify
 from dash.dependencies import Input, Output, State
 import dash
@@ -15,18 +16,53 @@ config = None
 app = dash.Dash(__name__)
 app.title = 'Tuning OLL'
 
+
+
+def load_config():
+  global config
+  config = {}
+
+  for key, value in os.environ.items():
+    if key.startswith("OO_"):
+      # Remove 'OO_' prefix and convert to lowercase
+      key = key[3:].lower()
+
+      # Split the key at double underscores
+      key_parts = key.split('__')
+
+      # Infer the type
+      if value.isdigit():
+        parsed_value = int(value)
+      elif all(char.isdigit() or char == '.' for char in value):
+        try:
+          parsed_value = float(value)
+        except ValueError:
+          parsed_value = value
+      else:
+        parsed_value = value
+
+      # Create nested dictionaries as necessary
+      d = config
+      for part in key_parts[:-1]:
+        if part not in d:
+          d[part] = {}
+        d = d[part]
+      d[key_parts[-1]] = parsed_value
+
+def load_db_path():
+  global config
+  return config['db_path']
+
 def load_config_data():
-    with open(env_yaml_path) as file:
-        config = yaml.safe_load(file)
+  # Function to format value
+  def format_value(value):
+    if isinstance(value, int) or isinstance(value, float):
+        return f"{value:,}"  # Format numbers with commas
+    return str(value)  # Convert other types to string
 
-        # Function to format value
-        def format_value(value):
-            if isinstance(value, int) or isinstance(value, float):
-                return f"{value:,}"  # Format numbers with commas
-            return str(value)  # Convert other types to string
+  return [{"Key": k, "Value": format_value(v)} for k, v in config.items()]
 
-        return [{"Key": k, "Value": format_value(v)} for k, v in config.items()]
-
+load_config()
 config_data = load_config_data()
 
 app.layout = html.Div([
@@ -56,7 +92,7 @@ app.layout = html.Div([
                 {'label': 'Number of Total Function Evaluations', 'value': 'num_total_function_evaluations'},
                 {'label': 'Number of Total Timesteps', 'value': 'num_total_timesteps'},
             ],
-            value='num_total_function_evaluations',
+            value='num_total_timesteps',
             style={'width': '100%'}
         ),
     ], style={'display': 'inline-block', 'width': '25%', 'vertical-align': 'top'}),
@@ -95,13 +131,16 @@ def update_config_table(clickData):
     x_value = clickData['points'][0]['x']
     y_value = clickData['points'][0]['y']
 
-    inspectify.d(f"{x_value:,}")
-    inspectify.d(f"{y_value:,}")
+
+    point_index = clickData['points'][0]['pointIndex']
+    policy_id = list(policy_id_to_x_values.keys())[point_index]
+
 
     # You can format these values and add them to your config data
     updated_config_data = config_data.copy()  # Assuming config_data is your original data
     updated_config_data.append({'Key': 'Selected Policy X Value', 'Value': f"{x_value:,}"})
     updated_config_data.append({'Key': 'Selected Policy Y Value', 'Value': f"{y_value:,}"})
+    updated_config_data.append({'Key': 'Policy ID', 'Value': f"{policy_id:,}"})
 
     return updated_config_data
 
@@ -112,13 +151,6 @@ def update_config_table(clickData):
 
 
 
-
-# Load database path from .env.yaml
-def load_db_path():
-  with open(env_yaml_path) as file:
-    global config
-    config = yaml.safe_load(file)
-  return config['db_path']
 
 # Stylish layout for plots
 stylish_layout = {
