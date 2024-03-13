@@ -260,13 +260,37 @@ def drop_all_tables(db_path):
     cursor.executescript(drop_script)
 
 def main():
-  try:
-    with open(".env.yaml") as file:
-      global config
-      config = yaml.safe_load(file)
-  except FileNotFoundError:
-    print("Error: '.env.yaml' does not exist.", file=sys.stderr)
-    sys.exit(1)
+  global config
+  config = {}
+
+  for key, value in os.environ.items():
+    if key.startswith("OO_"):
+      # Remove 'OO_' prefix and convert to lowercase
+      key = key[3:].lower()
+
+      # Split the key at double underscores
+      key_parts = key.split('__')
+
+      # Infer the type
+      if value.isdigit():
+        parsed_value = int(value)
+      elif all(char.isdigit() or char == '.' for char in value):
+        try:
+          parsed_value = float(value)
+        except ValueError:
+          parsed_value = value
+      else:
+        parsed_value = value
+
+      # Create nested dictionaries as necessary
+      d = config
+      for part in key_parts[:-1]:
+        if part not in d:
+          d[part] = {}
+        d = d[part]
+      d[key_parts[-1]] = parsed_value
+
+  inspectify.d(config)
 
   setup_config(config)
   conn = setup_database(config['db_path'])
@@ -278,8 +302,6 @@ def main():
 
   # Q-learning process
   seed = numpy.random.randint(0, 100_000)
-
-
 
   # When initializing the database, pass the lock to the q_learning function
   q_table = q_learning_and_save_policy(
