@@ -48,6 +48,7 @@ fi
 yaml_path="$1"
 
 
+
 conda activate ./.conda_environment
 source <(python yaml2env.py "$yaml_path")
 python strategies.py
