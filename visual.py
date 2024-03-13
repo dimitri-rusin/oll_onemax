@@ -1,4 +1,6 @@
 from dash import dcc, html, dash_table
+from dash import callback_context
+
 from dash.dependencies import Input, Output, State
 import dash
 import inspectify
@@ -196,8 +198,11 @@ policy_id_to_x_values = {}
 def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxis_choice):
   global policy_id_to_x_values
 
+  trigger_id = callback_context.triggered[0]['prop_id'].split('.')[0]
+  inspectify.d(trigger_id)
+
   # Only update if auto-update is switched on
-  if 'ON' not in auto_update_value:
+  if not (trigger_id == 'policy-performance-plot' or 'ON' in auto_update_value):
     raise dash.exceptions.PreventUpdate
 
   db_path = load_db_path()
@@ -209,9 +214,28 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
   cursor.execute(f'SELECT policy_id, {x_axis_sql_column} FROM CONSTRUCTED_POLICIES WHERE policy_id >= 1')
   training_data = cursor.fetchall()
 
-  # Update the mapping of policy IDs to their x-values to include num_total_timesteps
-  policy_id_to_x_values = {policy_id: {column_name: value for column_name, value in zip(['num_training_episodes', 'num_total_function_evaluations', 'num_total_timesteps'], row)}
-               for policy_id, *row in cursor.execute('SELECT policy_id, num_training_episodes, num_total_function_evaluations, num_total_timesteps FROM CONSTRUCTED_POLICIES WHERE policy_id >= 1')}
+
+
+
+  try:
+    # Attempt to execute the query with all three columns
+    cursor.execute('SELECT policy_id, num_training_episodes, num_total_function_evaluations, num_total_timesteps FROM CONSTRUCTED_POLICIES WHERE policy_id >= 1')
+    rows = cursor.fetchall()
+
+    # Update the mapping of policy IDs to their x-values for all three columns
+    policy_id_to_x_values = {policy_id: {column_name: value for column_name, value in zip(['num_training_episodes', 'num_total_function_evaluations', 'num_total_timesteps'], row)}
+                             for policy_id, *row in rows}
+  except sqlite3.OperationalError:
+    # If the query fails due to missing columns, try a query with only the num_training_episodes column
+    cursor.execute('SELECT policy_id, num_training_episodes FROM CONSTRUCTED_POLICIES WHERE policy_id >= 1')
+    rows = cursor.fetchall()
+
+    # Update the mapping of policy IDs to their x-values for only the available column
+    policy_id_to_x_values = {policy_id: {'num_training_episodes': num_training_episodes}
+                             for policy_id, num_training_episodes in rows}
+
+
+
 
 
   # Calculate average number of function evaluations and standard deviation for each policy
@@ -222,7 +246,12 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
     evaluations = [e[0] for e in cursor.fetchall()]
 
     # Calculate average
-    if len(evaluations) >= config['num_evaluation_episodes']:
+    num_evaluation_episodes = None
+    # num_evaluation_episodes = config['num_evaluation_episodes']
+    if num_evaluation_episodes is None:
+      num_evaluation_episodes = 1
+
+    if len(evaluations) >= num_evaluation_episodes:
       avg_evaluations = sum(evaluations) / len(evaluations)
       # Calculate standard deviation
       std_dev = math.sqrt(sum((e - avg_evaluations) ** 2 for e in evaluations) / len(evaluations))
@@ -298,7 +327,7 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
         y=baseline_upper_bound,
         mode='lines',
         line=dict(color='rgba(255, 165, 0, 0.2)'),
-        name='Upper Bound (Baseline Variance)'
+        name='Upper Bound (Baseline Variance)',
       ),
       go.Scatter(
         x=num_episodes,
@@ -306,7 +335,7 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
         mode='lines',
         fill='tonexty',
         line=dict(color='rgba(255, 165, 0, 0.2)'),
-        name='Lower Bound (Baseline Variance)'
+        name='Lower Bound (Baseline Variance)',
       )
   ])
 
@@ -331,7 +360,7 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
       ),
       font=stylish_layout['font'],
       paper_bgcolor=stylish_layout['paper_bgcolor'],
-      plot_bgcolor=stylish_layout['plot_bgcolor']
+      plot_bgcolor=stylish_layout['plot_bgcolor'],
     )
   }
 
