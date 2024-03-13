@@ -3,10 +3,9 @@
 # Exit immediately on errors, treat unset variables as an error, and fail on error in any pipeline
 set -euo pipefail
 
-# Dynamically find the Conda executable path
-conda_path=$(which conda)
 
-# Determine the correct path for conda.sh based on the location of the conda executable
+
+conda_path=$(which conda)
 if [[ "$conda_path" == */condabin/conda ]]; then
   conda_sh_path="${conda_path%/condabin/conda}/etc/profile.d/conda.sh"
 elif [[ "$conda_path" == */bin/conda ]]; then
@@ -15,9 +14,7 @@ else
   echo "Error: Unable to locate the conda.sh file."
   exit 1
 fi
-
 echo "Sourcing: $conda_sh_path"
-# Source the conda.sh script for proper initialization
 source "$conda_sh_path"
 
 
