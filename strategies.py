@@ -1,7 +1,7 @@
 import gymnasium
-import onell_algs_rs
 import inspectify
 import numpy
+import onell_algs_rs
 import os
 import paper_code.onell_algs
 import sqlite3
@@ -289,8 +289,6 @@ def main():
           d[part] = {}
         d = d[part]
       d[key_parts[-1]] = parsed_value
-
-  inspectify.d(config)
 
   setup_config(config)
   conn = setup_database(config['db_path'])
