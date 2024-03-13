@@ -21,41 +21,49 @@ app.title = 'Tuning OLL'
 def load_db_path():
   return os.getenv('OO_DB_PATH')
 
+
+
 def load_config_data():
-  db_path = load_db_path()  # Ensure this function is defined elsewhere to get the database path
-  config = []
+    db_path = load_db_path()  # Ensure this function is defined elsewhere to get the database path
+    config = {}
 
-  with sqlite3.connect(db_path) as conn:
-      cursor = conn.cursor()
-      cursor.execute("SELECT key, value FROM CONFIG")
-      rows = cursor.fetchall()
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT key, value FROM CONFIG")
+            rows = cursor.fetchall()
 
-  # Process each row to infer the type and construct a nested dictionary
-  config = {}
-  for key, value in rows:
-      # Infer the type
-      if value.isdigit():
-          parsed_value = int(value)
-      elif all(char.isdigit() or char == '.' for char in value):
-          try:
-              parsed_value = float(value)
-          except ValueError:
-              parsed_value = value
-      else:
-          parsed_value = value
+        # Process each row to infer the type and construct a nested dictionary
+        config = {}
+        for key, value in rows:
+            # Infer the type
+            if value.isdigit():
+                parsed_value = int(value)
+            elif all(char.isdigit() or char == '.' for char in value):
+                try:
+                    parsed_value = float(value)
+                except ValueError:
+                    parsed_value = value
+            else:
+                parsed_value = value
 
-      # Create nested dictionaries based on key structure
-      key_parts = key.split('__')
-      d = config
-      for part in key_parts[:-1]:
-          if part not in d:
-              d[part] = {}
-          d = d[part]
-      d[key_parts[-1]] = parsed_value
+            # Create nested dictionaries based on key structure
+            key_parts = key.split('__')
+            d = config
+            for part in key_parts[:-1]:
+                if part not in d:
+                    d[part] = {}
+                d = d[part]
+            d[key_parts[-1]] = parsed_value
+    except sqlite3.Error:
+        # If the CONFIG table doesn't exist or any other SQL error occurs
+        config = {}
 
-  return config
+    return config
 
 config = load_config_data()
+
+
 
 
 def flatten_config(config, parent_key=''):
@@ -178,7 +186,6 @@ policy_id_to_x_values = {}
 
 
 
-# Updated Callback for policy performance plot
 @app.callback(
     Output('policy-performance-plot', 'figure'),
     [Input('policy-performance-plot', 'clickData'),
@@ -188,18 +195,14 @@ policy_id_to_x_values = {}
 )
 def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxis_choice):
   global policy_id_to_x_values
+
   # Only update if auto-update is switched on
   if 'ON' not in auto_update_value:
     raise dash.exceptions.PreventUpdate
 
-
-
-
   db_path = load_db_path()
   conn = sqlite3.connect(db_path)
   cursor = conn.cursor()
-
-
 
   # Modify the SQL query based on the x-axis choice
   x_axis_sql_column = xaxis_choice
@@ -331,7 +334,6 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
       plot_bgcolor=stylish_layout['plot_bgcolor']
     )
   }
-
 
 
 @app.callback(
