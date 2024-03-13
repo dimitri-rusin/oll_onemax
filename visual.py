@@ -1,12 +1,12 @@
 from dash import dcc, html, dash_table
-import os
-import inspectify
 from dash.dependencies import Input, Output, State
 import dash
+import inspectify
 import math
+import os
 import pandas
-import plotly.graph_objs as go
 import plotly
+import plotly.graph_objs as go
 import sqlite3
 import yaml
 
@@ -18,52 +18,58 @@ app.title = 'Tuning OLL'
 
 
 
-def load_config():
-  global config
-  config = {}
-
-  for key, value in os.environ.items():
-    if key.startswith("OO_"):
-      # Remove 'OO_' prefix and convert to lowercase
-      key = key[3:].lower()
-
-      # Split the key at double underscores
-      key_parts = key.split('__')
-
-      # Infer the type
-      if value.isdigit():
-        parsed_value = int(value)
-      elif all(char.isdigit() or char == '.' for char in value):
-        try:
-          parsed_value = float(value)
-        except ValueError:
-          parsed_value = value
-      else:
-        parsed_value = value
-
-      # Create nested dictionaries as necessary
-      d = config
-      for part in key_parts[:-1]:
-        if part not in d:
-          d[part] = {}
-        d = d[part]
-      d[key_parts[-1]] = parsed_value
-
 def load_db_path():
-  global config
-  return config['db_path']
+  return os.getenv('OO_DB_PATH')
 
 def load_config_data():
-  # Function to format value
-  def format_value(value):
-    if isinstance(value, int) or isinstance(value, float):
-        return f"{value:,}"  # Format numbers with commas
-    return str(value)  # Convert other types to string
+  db_path = load_db_path()  # Ensure this function is defined elsewhere to get the database path
+  config = []
 
-  return [{"Key": k, "Value": format_value(v)} for k, v in config.items()]
+  with sqlite3.connect(db_path) as conn:
+      cursor = conn.cursor()
+      cursor.execute("SELECT key, value FROM CONFIG")
+      rows = cursor.fetchall()
 
-load_config()
-config_data = load_config_data()
+  # Process each row to infer the type and construct a nested dictionary
+  config = {}
+  for key, value in rows:
+      # Infer the type
+      if value.isdigit():
+          parsed_value = int(value)
+      elif all(char.isdigit() or char == '.' for char in value):
+          try:
+              parsed_value = float(value)
+          except ValueError:
+              parsed_value = value
+      else:
+          parsed_value = value
+
+      # Create nested dictionaries based on key structure
+      key_parts = key.split('__')
+      d = config
+      for part in key_parts[:-1]:
+          if part not in d:
+              d[part] = {}
+          d = d[part]
+      d[key_parts[-1]] = parsed_value
+
+  return config
+
+config = load_config_data()
+
+
+def flatten_config(config, parent_key=''):
+    items = []
+    for k, v in config.items():
+        new_key = f"{parent_key}__{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_config(v, new_key))
+        else:
+            items.append({'Key': new_key, 'Value': v})
+    return items
+
+flattened_config = flatten_config(config)
+
 
 app.layout = html.Div([
     html.Div([
@@ -101,7 +107,7 @@ app.layout = html.Div([
     dash_table.DataTable(
         id='config-table',
         columns=[{"name": i, "id": i} for i in ['Key', 'Value']],
-        data=config_data,
+        data=flattened_config,
         style_cell={'textAlign': 'left'},
         style_header={
             'backgroundColor': 'white',
@@ -137,7 +143,7 @@ def update_config_table(clickData):
 
 
     # You can format these values and add them to your config data
-    updated_config_data = config_data.copy()  # Assuming config_data is your original data
+    updated_config_data = flattened_config.copy()
     updated_config_data.append({'Key': 'Selected Policy X Value', 'Value': f"{x_value:,}"})
     updated_config_data.append({'Key': 'Selected Policy Y Value', 'Value': f"{y_value:,}"})
     updated_config_data.append({'Key': 'Policy ID', 'Value': f"{policy_id:,}"})
@@ -201,9 +207,6 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
                for policy_id, *row in cursor.execute('SELECT policy_id, num_training_episodes, num_total_function_evaluations, num_total_timesteps FROM CONSTRUCTED_POLICIES WHERE policy_id >= 1')}
 
 
-
-
-
   # Calculate average number of function evaluations and standard deviation for each policy
   avg_function_evaluations = []
   std_dev_evaluations = []
@@ -250,13 +253,6 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
   baseline_upper_bound = [baseline_avg_length + baseline_std_dev] * len(num_episodes)
   baseline_lower_bound = [baseline_avg_length - baseline_std_dev] * len(num_episodes)
 
-
-
-
-
-
-
-
   data = []
 
   # Determine if a point has been clicked and find the corresponding policy ID
@@ -264,8 +260,8 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
   if clickData:
     point_index = clickData['points'][0]['pointIndex']
     # Check if the point index exists in policy_id_to_x_values
-    if point_index in policy_id_to_x_values:
-      policy_id = list(policy_id_to_x_values.keys())[point_index]  # Retrieve policy ID based on point index
+    policy_id = list(policy_id_to_x_values.keys())[point_index]  # Retrieve policy ID based on point index
+    if policy_id in policy_id_to_x_values:
       new_x_value = policy_id_to_x_values[policy_id][xaxis_choice]  # Get new x value based on xaxis choice
 
       # Create the selected point with the new x value
@@ -294,19 +290,21 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
         x=num_episodes,
         y=baseline_upper_bound,
         mode='lines',
-        line=dict(color='rgba(255, 165, 0, 0.2)'),  # Semi-transparent orange for upper bound
+        line=dict(color='rgba(255, 165, 0, 0.2)'),
         name='Upper Bound (Baseline Variance)'
       ),
       go.Scatter(
         x=num_episodes,
         y=baseline_lower_bound,
         mode='lines',
-        fill='tonexty',  # Fill area between this line and the line above
-        line=dict(color='rgba(255, 165, 0, 0.2)'),  # Semi-transparent orange for lower bound
+        fill='tonexty',
+        line=dict(color='rgba(255, 165, 0, 0.2)'),
         name='Lower Bound (Baseline Variance)'
       )
   ])
 
+  inspectify.d(clickData)
+  inspectify.d(selected_point)
   if selected_point:
     data.append(selected_point)
 
@@ -318,13 +316,13 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
         title=xaxis_choice.replace('_', ' ').title(),
         gridcolor=stylish_layout['gridcolor'],
         gridwidth=stylish_layout['gridwidth'],
-        tickformat=',',  # Add thousands separator
+        tickformat=',',
       ),
       yaxis=dict(
-        title='#FEs until optimum',  # Updated Y-axis title
+        title='#FEs until optimum',
         gridcolor=stylish_layout['gridcolor'],
         gridwidth=stylish_layout['gridwidth'],
-        tickformat=',',  # Add thousands separator
+        tickformat=',',
       ),
       font=stylish_layout['font'],
       paper_bgcolor=stylish_layout['paper_bgcolor'],
@@ -362,8 +360,8 @@ def update_fitness_lambda_plot(clickData, xaxis_choice):
   selected_policy_curve = {'data': [], 'layout': {}}
   if clickData:
     point_index = clickData['points'][0]['pointIndex']
-    if point_index in policy_id_to_x_values:
-      policy_id = list(policy_id_to_x_values.keys())[point_index]
+    policy_id = list(policy_id_to_x_values.keys())[point_index]
+    if policy_id in policy_id_to_x_values:
 
       # Fetch mean and variance of initial fitness for the selected policy
       cursor.execute('SELECT mean_initial_fitness, variance_initial_fitness FROM CONSTRUCTED_POLICIES WHERE policy_id = ?', (policy_id,))

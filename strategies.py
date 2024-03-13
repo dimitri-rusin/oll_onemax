@@ -1,4 +1,5 @@
 import gymnasium
+import collections.abc
 import inspectify
 import numpy
 import onell_algs_rs
@@ -160,13 +161,20 @@ def q_learning_and_save_policy(total_episodes, learning_rate, gamma, epsilon, se
   return q_table
 
 def create_tables(conn):
-  """Create necessary tables in the database."""
-  with conn:
-    conn.executescript('''
-      CREATE TABLE IF NOT EXISTS POLICY_DETAILS (policy_id INTEGER, fitness INTEGER, lambda_minus_one INTEGER);
-      CREATE TABLE IF NOT EXISTS CONSTRUCTED_POLICIES (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_total_timesteps INTEGER, num_training_episodes INTEGER, num_total_function_evaluations INTEGER, mean_initial_fitness DOUBLE, variance_initial_fitness DOUBLE, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
-      CREATE TABLE IF NOT EXISTS EVALUATION_EPISODES (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, num_function_evaluations INTEGER, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
-    ''')
+    """Create necessary tables in the database."""
+    with conn:
+        conn.executescript('''
+          CREATE TABLE IF NOT EXISTS POLICY_DETAILS (policy_id INTEGER, fitness INTEGER, lambda_minus_one INTEGER);
+          CREATE TABLE IF NOT EXISTS CONSTRUCTED_POLICIES (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_total_timesteps INTEGER, num_training_episodes INTEGER, num_total_function_evaluations INTEGER, mean_initial_fitness DOUBLE, variance_initial_fitness DOUBLE, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
+          CREATE TABLE IF NOT EXISTS EVALUATION_EPISODES (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, num_function_evaluations INTEGER, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
+          CREATE TABLE IF NOT EXISTS CONFIG (key TEXT PRIMARY KEY, value TEXT);
+        ''')
+
+def insert_config(conn, config):
+    """Insert config dictionary into CONFIG table."""
+    with conn:
+        for key, value in config.items():
+            conn.execute('INSERT INTO CONFIG (key, value) VALUES (?, ?)', (key, str(value)))
 
 def insert_special_policy(conn, num_dimensions):
   """Insert the special policy with policy_id -1."""
@@ -294,6 +302,9 @@ def main():
   conn = setup_database(config['db_path'])
   create_tables(conn)
 
+  # Insert config into CONFIG table
+  insert_config(conn, flatten_dict(config))
+
   # Insert and evaluate the special policy
   insert_special_policy(conn, config['n'])
   evaluate_policy(-1, config['db_path'], config['n'], config['random_seed'], config['num_evaluation_episodes'])
@@ -313,6 +324,20 @@ def main():
   )
 
   conn.close()
+
+def flatten_dict(d, parent_key='', sep='__'):
+    """
+    Flatten a nested dictionary.
+    Example: {'a': {'b': 1}} becomes {'a__b': 1}
+    """
+    items = []
+    for k, v in d.items():
+        new_key = parent_key + sep + k if parent_key else k
+        if isinstance(v, collections.abc.MutableMapping):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
 
 def setup_config(config):
   """Setup global configuration parameters."""
