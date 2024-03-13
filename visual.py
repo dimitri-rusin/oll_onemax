@@ -199,7 +199,6 @@ def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxi
   global policy_id_to_x_values
 
   trigger_id = callback_context.triggered[0]['prop_id'].split('.')[0]
-  inspectify.d(trigger_id)
 
   # Only update if auto-update is switched on
   if not (trigger_id == 'policy-performance-plot' or 'ON' in auto_update_value):
