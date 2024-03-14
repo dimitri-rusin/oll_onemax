@@ -22,7 +22,8 @@ class OneMaxOLL(gymnasium.Env):
   def __init__(self, n, seed=None):
     super(OneMaxOLL, self).__init__()
     self.n = n
-    self.action_space = gymnasium.spaces.Discrete(n)
+    num_actions = int(numpy.sqrt(n))
+    self.action_space = gymnasium.spaces.Discrete(num_actions)
     self.observation_space = gymnasium.spaces.Box(low=0, high=n - 1, shape=(1,), dtype=numpy.int32)
     self.seed = seed
     self.random = numpy.random.RandomState(self.seed)

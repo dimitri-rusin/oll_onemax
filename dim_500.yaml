@@ -3,7 +3,7 @@ db_path: data/dim_500.db
 episodes: 999_999_999_999
 num_training_timesteps: 1_000_000
 epsilon: 0.1
-evaluation_interval: 100
+evaluation_interval: 10
 gamma: 1
 learning_rate: 0.1
 n: 500
