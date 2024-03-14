@@ -1,4 +1,6 @@
 import gymnasium
+import datetime
+
 import collections.abc
 import inspectify
 import numpy
@@ -40,10 +42,16 @@ class OneMaxOLL(gymnasium.Env):
     self.num_function_evaluations = 0
     self.random = numpy.random.RandomState(self.seed)
     self.random_number_generator = numpy.random.default_rng(self.seed)
-    self.current_solution = paper_code.onell_algs.OneMax(
-      self.n,
-      rng = self.random_number_generator,
-    )
+
+    initial_fitness = self.n
+    while initial_fitness >= self.n:
+      self.current_solution = paper_code.onell_algs.OneMax(
+        self.n,
+        rng = self.random_number_generator,
+        ratio_of_optimal_bits = 0.9,
+      )
+      initial_fitness = self.current_solution.fitness
+
     self.num_function_evaluations += 1 # there is one evaluation [call to .eval()] inside OneMax
 
     return numpy.array([self.current_solution.fitness])
@@ -230,7 +238,7 @@ def evaluate_episode(policy, episode_seed):
   for i in range(len(policy_list)):
     policy_list[i] += 1
 
-  num_function_evaluations = onell_algs_rs.onell_lambda(config['n'], policy_list, episode_seed, 999_999_999)
+  num_function_evaluations = onell_algs_rs.onell_lambda(config['n'], policy_list, episode_seed, 999_999_999, 0.9)
 
   return num_function_evaluations
 
@@ -298,6 +306,15 @@ def main():
           d[part] = {}
         d = d[part]
       d[key_parts[-1]] = parsed_value
+
+  # Insert the date into the DB filepath.
+  now = datetime.datetime.now()
+  timestamp = now.strftime("%B_%d_%Hh_%Mm_%Ss")
+  base_path, file_name = config['db_path'].rsplit('/', 1)
+  file_name_without_extension, extension = file_name.split('.')
+  new_file_name = f"{timestamp}__{file_name_without_extension}.{extension}"
+  new_db_path = f"{base_path}/{new_file_name}"
+  config['db_path'] = new_db_path
 
   setup_config(config)
   conn = setup_database(config['db_path'])

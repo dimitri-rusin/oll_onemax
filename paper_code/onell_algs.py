@@ -9,12 +9,12 @@ class BinaryProblem:
     """
     An abstract class for an individual in binary representation
     """
-    def __init__(self, n, val=None, rng=np.random.default_rng()):
+    def __init__(self, n, val=None, rng=np.random.default_rng(), ratio_of_optimal_bits=0.5):
         if val is not None:
             assert isinstance(val, bool)
             self.data = np.array([val] * n)
         else:
-            self.data = rng.choice([True,False], size=n) 
+            self.data = rng.choice([True, False], size=n, p=[ratio_of_optimal_bits, 1 - ratio_of_optimal_bits])
         self.n = n
         self.fitness = self.eval()
         

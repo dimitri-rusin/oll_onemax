@@ -60,4 +60,4 @@ pip install --requirement .pip.txt
 )
 
 # Find and install the Python wheel files built by maturin
-find ./paper_code/onell_algs_rs/target/wheels -name "*.whl" -print0 | xargs -0 pip install
+find ./paper_code/onell_algs_rs/target/wheels -name "*.whl" -print0 | xargs -0 pip install --force-reinstall
