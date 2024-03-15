@@ -1,4 +1,23 @@
 
+
+
+
+
+
+
+```sh
+OO__EXECUTION__EPISODE_ID_LOW=1 OO__EXECUTION__EPISODE_ID_HIGH=9999 OO__DB_PATH=/home/dimitri/code/oll_onemax/computed/data/March_15_17h_39m_14s__dim_50.db OO__N=50 python tests/test_evaluation_episodes_with_rust.py
+
+OO__EXECUTION__EPISODE_ID_LOW=1 OO__EXECUTION__EPISODE_ID_HIGH=9999 OO__DB_PATH=/home/dimitri/code/oll_onemax/computed/data/March_15_10h_31m_28s__dim_50.db OO__N=50 python tests/test_evaluation_episodes_with_rust.py
+
+OO__EXECUTION__EPISODE_ID_LOW=9 OO__EXECUTION__EPISODE_ID_HIGH=13 OO__DB_PATH=/home/dimitri/code/oll_onemax/computed/data/March_15_10h_31m_28s__dim_50.db OO__N=50 python tests/test_evaluation_episodes_with_rust.py
+
+
+OO_DB_PATH=./computed/cirrus/dim_50.db python visual.py
+```
+
+
+
 ```
 [dimitri_rusin@cirrus-login1 oll_onemax]$ sbatch strategies.slurm dim_50.yaml
 Submitted batch job 5524237
@@ -47,6 +66,8 @@ rsync -avz --progress cirrus:/work/sc122/sc122/dimitri_rusin/oll_onemax/data/ /h
 ```
 
 ```sh
+source (python .deploy/apply_setting.py ./experiment_settings/another.yaml | psub); and python src/generate.py
+
 source (python yaml2env.py dim_50.yaml | psub); and python generate_policies.py
 source (python yaml2env.py dim_50.yaml | psub); and python visual.py
 

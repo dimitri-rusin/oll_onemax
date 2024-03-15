@@ -22,10 +22,8 @@ app.title = 'Tuning OLL'
 def load_db_path():
   return os.getenv('OO__DB_PATH')
 
-
-
 def load_config_data():
-    db_path = load_db_path()  # Ensure this function is defined elsewhere to get the database path
+    db_path = load_db_path()
     config = {}
 
     try:

@@ -241,7 +241,7 @@ def evaluate_episode(policy, episode_seed):
   for i in range(len(policy_list)):
     policy_list[i] += 1
 
-  num_function_evaluations = onell_algs_rs.onell_lambda(config['n'], policy_list, episode_seed, 999_999_999, 0.9)
+  num_function_evaluations = onell_algs_rs.onell_lambda(config['n'], policy_list, episode_seed, 999_999_999, config['probability_of_closeness_to_optimum'])
 
   return num_function_evaluations
 
