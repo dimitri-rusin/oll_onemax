@@ -39,15 +39,15 @@ git submodule update
 conda activate base
 
 # Clean up any previous Conda environment and build targets
-rm -rf ./.conda_environment/
-rm -rf ./paper_code/onell_algs_rs/target/
+rm -rf .deploy/conda_environment/
+rm -rf dacbench_adjustments/onell_algs_rs/target/
 
 # Create and activate a new Conda environment based on .conda.yaml configuration
-conda env create --prefix ./.conda_environment/ --file .conda.yaml
-conda activate ./.conda_environment/
+conda env create --prefix .deploy/conda_environment/ --file .deploy/conda.yaml
+conda activate .deploy/conda_environment/
 
 # Install Python dependencies from the requirements file
-pip install --requirement .pip.txt
+pip install --requirement .deploy/pip.txt
 
 # Uncomment the following lines to install and configure Rust (if necessary for your project)
 # curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -55,9 +55,9 @@ pip install --requirement .pip.txt
 
 # Build Rust project using maturin, within its directory (isolated in a subshell)
 (
-  cd ./paper_code/onell_algs_rs/
+  cd dacbench_adjustments/onell_algs_rs/
   maturin build --release
 )
 
 # Find and install the Python wheel files built by maturin
-find ./paper_code/onell_algs_rs/target/wheels -name "*.whl" -print0 | xargs -0 pip install --force-reinstall
+find dacbench_adjustments/onell_algs_rs/target/wheels -name "*.whl" -print0 | xargs -0 pip install --force-reinstall

@@ -22,7 +22,7 @@ def main():
         sys.exit(1)
 
 def set_or_unset_env_vars(config, clean, shell):
-    for key, value in flatten_config(config, 'OO'):
+    for key, value in flatten_config(config, 'OO_'):
         env_var_name = key.upper()
         if clean:
             if 'fish' in shell:

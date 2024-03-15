@@ -1,12 +1,11 @@
-import gymnasium
-import datetime
-
 import collections.abc
+import datetime
+import gymnasium
 import inspectify
 import numpy
 import onell_algs_rs
 import os
-import paper_code.onell_algs
+import dacbench_adjustments.onell_algs
 import sqlite3
 import sys
 import time
@@ -45,7 +44,7 @@ class OneMaxOLL(gymnasium.Env):
 
     initial_fitness = self.n
     while initial_fitness >= self.n:
-      self.current_solution = paper_code.onell_algs.OneMax(
+      self.current_solution = dacbench_adjustments.onell_algs.OneMax(
         self.n,
         rng = self.random_number_generator,
         ratio_of_optimal_bits = 0.9,
@@ -281,9 +280,9 @@ def main():
   config = {}
 
   for key, value in os.environ.items():
-    if key.startswith("OO_"):
-      # Remove 'OO_' prefix and convert to lowercase
-      key = key[3:].lower()
+    if key.startswith("OO__"):
+      # Remove 'OO__' prefix and convert to lowercase
+      key = key[4:].lower()
 
       # Split the key at double underscores
       key_parts = key.split('__')
@@ -306,6 +305,10 @@ def main():
           d[part] = {}
         d = d[part]
       d[key_parts[-1]] = parsed_value
+
+
+  print(config)
+
 
   # Insert the date into the DB filepath.
   now = datetime.datetime.now()

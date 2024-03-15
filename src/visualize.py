@@ -1,6 +1,5 @@
-from dash import dcc, html, dash_table
 from dash import callback_context
-
+from dash import dcc, html, dash_table
 from dash.dependencies import Input, Output, State
 import dash
 import inspectify
@@ -21,7 +20,7 @@ app.title = 'Tuning OLL'
 
 
 def load_db_path():
-  return os.getenv('OO_DB_PATH')
+  return os.getenv('OO__DB_PATH')
 
 
 

@@ -1,7 +1,2 @@
-.conda_environment/
-.env
-data/
-logs/
-mesu/
-runs/
-traces.csv
+.deploy/conda_environment/
+computed/

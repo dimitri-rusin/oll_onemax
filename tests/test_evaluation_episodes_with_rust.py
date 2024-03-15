@@ -30,16 +30,10 @@ class TestFunctionEvaluations(unittest.TestCase):
     successful_checks = 0
     failed_checks = 0
 
-    # Load configuration
-    try:
-      with open(".env.yaml") as file:
-        config = yaml.safe_load(file)
-    except FileNotFoundError as e:
-      self.fail(f"Error: '.env.yaml' does not exist: {e}")
-
-    episode_id_low = config['execution']['episode_id_low']
-    episode_id_high = config['execution']['episode_id_high']
-    db_path = config['db_path']
+    episode_id_low = os.getenv('OO__EXECUTION__EPISODE_ID_LOW')
+    episode_id_high = os.getenv('OO__EXECUTION__EPISODE_ID_HIGH')
+    db_path = os.getenv('OO__DB_PATH')
+    n = os.getenv('OO__N')
 
     for episode_id in range(episode_id_low, episode_id_high + 1):
       # Fetch policy_id, number of function evaluations, and episode_seed from EVALUATION_EPISODES
@@ -52,7 +46,7 @@ class TestFunctionEvaluations(unittest.TestCase):
       for i in range(len(policy)):
         policy[i] += 1
 
-      rust_randomness_num_function_evaluations = onell_algs_rs.onell_lambda(config['n'], policy, episode_seed, 999_999_999)
+      rust_randomness_num_function_evaluations = onell_algs_rs.onell_lambda(n, policy, episode_seed, 999_999_999)
 
       try:
         self.assertEqual(db_num_function_evaluations, rust_randomness_num_function_evaluations, "Number of function evaluations does not match for episode_id " + str(episode_id))

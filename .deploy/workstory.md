@@ -47,7 +47,7 @@ rsync -avz --progress cirrus:/work/sc122/sc122/dimitri_rusin/oll_onemax/data/ /h
 ```
 
 ```sh
-source (python yaml2env.py dim_50.yaml | psub); and python strategies.py
+source (python yaml2env.py dim_50.yaml | psub); and python generate_policies.py
 source (python yaml2env.py dim_50.yaml | psub); and python visual.py
 
 source (python yaml2env.py .env.yaml | psub); and python visual.py
