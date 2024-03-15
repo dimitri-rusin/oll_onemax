@@ -5,11 +5,15 @@ import inspectify
 import numpy
 import onell_algs_rs
 import os
-import dacbench_adjustments.onell_algs
 import sqlite3
 import sys
 import time
 import yaml
+
+import sys
+import pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
+import dacbench_adjustments.onell_algs
 
 config = None
 

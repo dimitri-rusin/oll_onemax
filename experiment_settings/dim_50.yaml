@@ -1,5 +1,5 @@
 random_seed: 42
-db_path: data/dim_50.db
+db_path: computed/data/dim_50.db
 episodes: 999_999_999_999
 num_training_timesteps: 1_000_000
 epsilon: 0.1
