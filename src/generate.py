@@ -148,7 +148,7 @@ def q_learning_and_save_policy(total_episodes, learning_rate, gamma, epsilon, se
       fitness = next_fitness[0]
 
     # Evaluate policy at specified intervals
-    if episode_index % evaluation_interval == 0:
+    if episode_index % evaluation_interval == 0 or num_training_timesteps >= config['num_training_timesteps']:
 
       # Calculating mean and variance
       mean_initial_fitness = sum_initial_fitness / episode_index
@@ -167,8 +167,8 @@ def q_learning_and_save_policy(total_episodes, learning_rate, gamma, epsilon, se
       )
       evaluate_policy(policy_id, config['db_path'], config['n'], config['random_seed'], config['num_evaluation_episodes'])
 
-    if num_training_timesteps >= config['num_training_timesteps']:
-      break
+      if num_training_timesteps >= config['num_training_timesteps']:
+        break
 
   return q_table
 
