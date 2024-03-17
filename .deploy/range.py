@@ -4,11 +4,11 @@ import itertools
 import hashlib
 import re
 
-def pretty_print_int(n):
-    return re.sub(r"(?!^)(?=(?:...)+$)", "_", str(n))
-
 def represent_int(dumper, data):
     return dumper.represent_scalar("tag:yaml.org,2002:int", pretty_print_int(data))
+
+def pretty_print_int(n):
+    return re.sub(r"(?!^)(?=(?:...)+$)", "_", str(n))
 
 yaml.add_representer(int, represent_int)
 
@@ -23,23 +23,41 @@ def generate_filename_from_config(single_config, wordlist, num_words):
     for i in range(0, num_words * 4, 4):
         index = int(digest[i:i+4], 16) % len(wordlist)
         words.append(wordlist[index])
-    return '_'.join(words)
+    return words
+
+def prune_filenames(filenames):
+    first_word_count = {}
+    for words in filenames:
+        first_word = words[0]
+        first_word_count[first_word] = first_word_count.get(first_word, 0) + 1
+
+    pruned_filenames = []
+    for words in filenames:
+        if first_word_count[words[0]] == 1:
+            pruned_filenames.append(words[0])
+        else:
+            pruned_filenames.append('_'.join(words))
+
+    return pruned_filenames
 
 def write_config_to_yaml(directory, configs, wordlist, num_words):
+    all_filenames = []
     for config in configs:
         keys, values = zip(*config.items())
         for combination in itertools.product(*values):
             single_config = dict(zip(keys, combination))
-            for key, value in single_config.items():
-                if isinstance(value, int) and ',' in f'{value:_}':
-                    single_config[key] = LiteralInt(value)
-            filename = generate_filename_from_config(single_config, wordlist, num_words)
-            single_config["db_path"] = single_config["db_path"].replace("<wordhash>", filename)
-            yaml_content = yaml.dump(single_config, default_flow_style=False)
-            filepath = os.path.join(directory, f'{filename}.yaml')
+            filename_words = generate_filename_from_config(single_config, wordlist, num_words)
+            all_filenames.append((single_config, filename_words))
 
-            with open(filepath, 'w') as file:
-                file.write(yaml_content)
+    pruned_filenames = prune_filenames([words for _, words in all_filenames])
+
+    for (single_config, _), pruned_filename in zip(all_filenames, pruned_filenames):
+        single_config["db_path"] = single_config["db_path"].replace("<wordhash>", pruned_filename)
+        yaml_content = yaml.dump(single_config, default_flow_style=False)
+        filepath = os.path.join(directory, f'{pruned_filename}.yaml')
+
+        with open(filepath, 'w') as file:
+            file.write(yaml_content)
 
 # Define the configurations list with possible values
 configs = [
@@ -69,6 +87,7 @@ configs = [
   },
 ]
 
+# Download from: https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt
 wordlist = load_wordlist('.deploy/eff_large_wordlist.txt')
 directory = 'config/March_11'
 os.makedirs(directory, exist_ok=True)

@@ -12,7 +12,7 @@ OO__EXECUTION__EPISODE_ID_LOW=1 OO__EXECUTION__EPISODE_ID_HIGH=9999 OO__DB_PATH=
 
 ```sh
 
-ls computed/cirrus | nl -v 8050 | xargs -L 1 sh -c 'screen -dmS $0 fish -c "conda activate .deploy/conda_environment; and OO__DB_PATH=computed/cirrus/$1 python src/visualize.py --port $0"'
+ls computed/cirrus | nl -v 8051 | xargs -L 1 sh -c 'screen -dmS $0 fish -c "conda activate .deploy/conda_environment; and OO__DB_PATH=computed/cirrus/$1 python src/visualize.py --port $0"'
 
 screen -ls | grep 'Detached' | awk '{print $1}' | xargs -I {} screen -S {} -X quit
 

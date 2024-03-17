@@ -43,7 +43,7 @@ rm -rf .deploy/conda_environment/
 rm -rf dacbench_adjustments/onell_algs_rs/target/
 
 # Create and activate a new Conda environment based on .conda.yaml configuration
-conda env create --prefix .deploy/conda_environment/ --file .deploy/conda.yaml
+conda env create --prefix .deploy/conda_environment/ --file .deploy/conda.yaml --debug
 conda activate .deploy/conda_environment/
 
 # Install Python dependencies from the requirements file

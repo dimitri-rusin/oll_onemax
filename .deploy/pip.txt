@@ -1,10 +1,11 @@
 ./dacbench
 colored==2.2.3
-dash==2.15.0
+dash==2.16.1
 gymnasium==0.29.1
 gymnasium[classic-control]==0.29.1
 inspectify==0.0.2
 jupyter==1.0.0
+maturin===0.13.7
 numpy==1.24.2
 opencv-python
 plotly==5.18.0
@@ -13,4 +14,3 @@ seaborn==0.12.2
 stable_baselines3==2.2.1
 tensorboard==2.15.1
 torch==2.2.0
-maturin===0.13.7
