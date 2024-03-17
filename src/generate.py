@@ -108,7 +108,7 @@ def q_learning_and_save_policy(learning_rate, gamma, epsilon, seed, database, ev
   max_training_timesteps = config['max_training_timesteps']
   num_q_table_updates = 0
   num_training_episodes = 0
-  num_training_timesteps = 0
+  num_training_timesteps = 1
   random_state = numpy.random.RandomState(seed)
   sum_initial_fitness = 0
   sum_squares_initial_fitness = 0
@@ -120,7 +120,7 @@ def q_learning_and_save_policy(learning_rate, gamma, epsilon, seed, database, ev
   evaluate_policy(policy_id, config['db_path'], config['n'], evaluation_seed, config['num_evaluation_episodes'])
 
   while num_training_timesteps < max_training_timesteps:
-    print(f"Training timestep {num_training_timesteps} / {max_training_timesteps}.")
+    print(f"Training timestep {num_training_timesteps:,} / {max_training_timesteps:,}.")
     episode_seed = random_state.randint(100_000)
     fitness, done = training_environment.reset(episode_seed)[0], False
 

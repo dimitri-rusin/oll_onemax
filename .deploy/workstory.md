@@ -36,7 +36,7 @@ sbatch .deploy/generate.slurm config/March_11/washable_underhand_poster_magnesiu
 
 ```sh
 python .deploy/range.py
-source (python .deploy/apply.py config/March_11/affection_directive_tavern_ruined_degrease.yaml | psub)
+source (python .deploy/apply.py config/March_11/attribute_gathering_uplifting_chump_kudos.yaml | psub)
 python src/generate.py
 
 
