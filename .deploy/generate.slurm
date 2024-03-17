@@ -49,6 +49,6 @@ yaml_path="$1"
 
 
 
-conda activate ./.conda_environment
-source <(python yaml2env.py "$yaml_path")
-python strategies.py
+conda activate .deploy/conda_environment
+source <(python .deploy/apply.py config/dim_50.yaml)
+python src/generate.py

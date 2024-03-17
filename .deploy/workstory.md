@@ -3,7 +3,7 @@
 
 
 ```sh
-bash generate.slurm dim_50.yaml
+bash .deploy/generate.slurm config/dim_50.yaml
 
 sbatch .deploy/generate.slurm config/dim_50.yaml
 sbatch .deploy/generate.slurm config/dim_500.yaml
