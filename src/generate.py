@@ -105,11 +105,6 @@ def q_learning_and_save_policy(learning_rate, gamma, epsilon, seed, database, ev
   num_observations = training_environment.observation_space.high[0] - training_environment.observation_space.low[0] + 1
   q_table = numpy.zeros((num_observations, training_environment.action_space.n))
 
-  policy = numpy.argmax(q_table, axis=1)
-  policy_id = insert_policy_and_get_id(database, policy)
-  insert_policy_info(database, policy_id, training_environment.num_total_timesteps, 0, training_environment.num_total_function_evaluations, 0, 0)
-  evaluate_policy(policy_id, config['db_path'], config['n'], config['random_seed'], config['num_evaluation_episodes'])
-
   max_training_timesteps = config['max_training_timesteps']
   num_q_table_updates = 0
   num_training_episodes = 0
@@ -117,6 +112,12 @@ def q_learning_and_save_policy(learning_rate, gamma, epsilon, seed, database, ev
   random_state = numpy.random.RandomState(seed)
   sum_initial_fitness = 0
   sum_squares_initial_fitness = 0
+
+  policy = numpy.argmax(q_table, axis=1)
+  policy_id = insert_policy_and_get_id(database, policy)
+  insert_policy_info(database, policy_id, training_environment.num_total_timesteps, 0, training_environment.num_total_function_evaluations, 0, 0)
+  evaluation_seed = random_state.randint(100_000)
+  evaluate_policy(policy_id, config['db_path'], config['n'], evaluation_seed, config['num_evaluation_episodes'])
 
   while num_training_timesteps < max_training_timesteps:
     print(f"Training timestep {num_training_timesteps} / {max_training_timesteps}.")
@@ -149,13 +150,15 @@ def q_learning_and_save_policy(learning_rate, gamma, epsilon, seed, database, ev
 
     # Evaluate policy at specified intervals
     if num_training_episodes % evaluation_interval == 0:
-      evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fitness, sum_squares_initial_fitness, q_table, database, training_environment)
+      evaluation_seed = random_state.randint(100_000)
+      evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fitness, sum_squares_initial_fitness, q_table, database, training_environment, evaluation_seed)
 
-  evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fitness, sum_squares_initial_fitness, q_table, database, training_environment)
+  evaluation_seed = random_state.randint(100_000)
+  evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fitness, sum_squares_initial_fitness, q_table, database, training_environment, evaluation_seed)
 
   return q_table
 
-def evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fitness, sum_squares_initial_fitness, q_table, database, training_environment):
+def evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fitness, sum_squares_initial_fitness, q_table, database, training_environment, seed):
   mean_initial_fitness = sum_initial_fitness / num_training_episodes
   variance_initial_fitness = (sum_squares_initial_fitness / num_training_episodes) - (mean_initial_fitness ** 2)
 
@@ -170,7 +173,7 @@ def evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fit
     mean_initial_fitness,
     variance_initial_fitness,
   )
-  evaluate_policy(policy_id, config['db_path'], config['n'], config['random_seed'], config['num_evaluation_episodes'])
+  evaluate_policy(policy_id, config['db_path'], config['n'], seed, config['num_evaluation_episodes'])
 
 def create_tables(database):
     """Create necessary tables in the database."""
@@ -323,25 +326,27 @@ def main():
   # Insert config into CONFIG table
   insert_config(database, flatten_dict(config))
 
+  initial_evaluation_seed = numpy.random.randint(0, 100_000)
+
   # Insert and evaluate the special policy
   insert_special_policy(database, config['n'])
   evaluate_policy(
     -1,
     config['db_path'],
     config['n'],
-    config['random_seed'],
+    initial_evaluation_seed,
     config['num_evaluation_episodes'],
   )
 
   # Q-learning process
-  seed = numpy.random.randint(0, 100_000)
+  algo_and_evaluation_seed = numpy.random.randint(0, 100_000)
 
   # When initializing the database, pass the lock to the q_learning function
   q_table = q_learning_and_save_policy(
     config['learning_rate'],
     config['gamma'],
     config['epsilon'],
-    seed,
+    algo_and_evaluation_seed,
     database,
     config['evaluation_interval'],
   )
