@@ -63,23 +63,23 @@ def write_config_to_yaml(directory, configs, wordlist, num_words):
 configs = [
   {
     "db_path": ["computed/data/<wordhash>.db"],
-    "epsilon": [0.1],
-    "evaluation_interval": [100],
+    "epsilon": [0.2, 0.1, 0.01],
+    "evaluation_interval": [500],
     "gamma": [1, 0.99, 0.995, 0.9998],
-    "learning_rate": [0.1],
+    "learning_rate": [0.1, 0.2],
     "n": [50],
-    "num_evaluation_episodes": [200],
-    "max_training_timesteps": [1_000_000],
+    "num_evaluation_episodes": [600],
+    "max_training_timesteps": [2_000_000],
     "probability_of_closeness_to_optimum": [0.5, 0.9],
     "random_seed": [42]
   },
   {
     "db_path": ["computed/data/<wordhash>.db"],
-    "epsilon": [0.1],
+    "epsilon": [0.1, 0.01],
     "evaluation_interval": [10],
     "gamma": [1, 0.99, 0.995, 0.9998],
     "learning_rate": [0.1],
-    "n": [500, 1_000],
+    "n": [500, 1_000, 2_000],
     "num_evaluation_episodes": [25],
     "max_training_timesteps": [1_000_000],
     "probability_of_closeness_to_optimum": [0.5, 0.9],
@@ -89,6 +89,6 @@ configs = [
 
 # Download from: https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt
 wordlist = load_wordlist('.deploy/eff_large_wordlist.txt')
-directory = 'config/March_11'
+directory = 'config/a_few_more_configs_March_17'
 os.makedirs(directory, exist_ok=True)
 write_config_to_yaml(directory, configs, wordlist, num_words=5)
