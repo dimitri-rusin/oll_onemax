@@ -2,6 +2,15 @@ import yaml
 import os
 import itertools
 import hashlib
+import re
+
+def pretty_print_int(n):
+    return re.sub(r"(?!^)(?=(?:...)+$)", "_", str(n))
+
+def represent_int(dumper, data):
+    return dumper.represent_scalar("tag:yaml.org,2002:int", pretty_print_int(data))
+
+yaml.add_representer(int, represent_int)
 
 def load_wordlist(filename):
     with open(filename, 'r') as file:
@@ -21,9 +30,12 @@ def write_config_to_yaml(directory, configs, wordlist, num_words):
         keys, values = zip(*config.items())
         for combination in itertools.product(*values):
             single_config = dict(zip(keys, combination))
+            for key, value in single_config.items():
+                if isinstance(value, int) and ',' in f'{value:_}':
+                    single_config[key] = LiteralInt(value)
             filename = generate_filename_from_config(single_config, wordlist, num_words)
             single_config["db_path"] = single_config["db_path"].replace("<wordhash>", filename)
-            yaml_content = yaml.dump(single_config)
+            yaml_content = yaml.dump(single_config, default_flow_style=False)
             filepath = os.path.join(directory, f'{filename}.yaml')
 
             with open(filepath, 'w') as file:
