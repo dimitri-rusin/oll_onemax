@@ -1,17 +1,17 @@
 from dash import callback_context
-import argparse
-import socket
 from dash import dcc, html, dash_table
 from dash.dependencies import Input, Output, State
+import argparse
 import dash
 import inspectify
 import math
 import os
-import sys
 import pandas
 import plotly
 import plotly.graph_objs as go
+import socket
 import sqlite3
+import sys
 import yaml
 
 config = None

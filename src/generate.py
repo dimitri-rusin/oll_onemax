@@ -9,7 +9,6 @@ import os
 import sqlite3
 import sys
 import time
-import time
 import yaml
 
 import sys
@@ -18,10 +17,6 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
 import dacbench_adjustments.onell_algs
 
 config = None
-
-
-
-
 
 # ============== ENVIRONMENT - BEGIN ==============
 
@@ -95,8 +90,6 @@ class OneMaxOLL(gymnasium.Env):
     return numpy.array([self.current_solution.fitness]), reward, terminated, info
 
 # ============== ENVIRONMENT - END ==============
-
-
 
 def q_learning_and_save_policy(learning_rate, gamma, epsilon, database, evaluation_interval):
   """Perform standard Q-learning, update Q-table, choose actions, save and evaluate policies."""
