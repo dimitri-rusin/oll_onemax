@@ -73,14 +73,18 @@ def load_config_data():
 config = load_config_data()
 
 def flatten_config(config, parent_key=''):
-    items = []
-    for k, v in config.items():
-        new_key = f"{parent_key}__{k}" if parent_key else k
-        if isinstance(v, dict):
-            items.extend(flatten_config(v, new_key))
-        else:
-            items.append({'Key': new_key, 'Value': v})
-    return items
+  items = []
+  for k, v in config.items():
+    new_key = f"{parent_key}__{k}" if parent_key else k
+    if isinstance(v, dict):
+      items.extend(flatten_config(v, new_key))
+    else:
+      if isinstance(v, (int, float)):
+        formatted_value = f"{v:,}"
+      else:
+        formatted_value = v
+      items.append({'Key': new_key, 'Value': formatted_value})
+  return items
 
 flattened_config = flatten_config(config)
 

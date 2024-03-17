@@ -3,12 +3,16 @@
 ```
 computed/data/untangled_shy_unread_dragster_scam.db
 
-
 OO__EXECUTION__EPISODE_ID_LOW=1 OO__EXECUTION__EPISODE_ID_HIGH=9999 OO__DB_PATH=computed/cirrus/untangled_shy_unread_dragster_scam.db OO__N=50 python tests/test_evaluation_episodes_with_rust.py
-
 ```
 
-
+Visualize experiment runs:
+```sh
+conda activate .deploy/conda_environment/
+screen -ls | grep 'Detached' | awk '{print $1}' | xargs -I {} screen -S {} -X quit
+ls computed/cirrus | nl -v 8061 | xargs -L 1 sh -c 'filename=$(basename $1 .db); screen -dmS ${filename}__$0 fish -c "conda activate .deploy/conda_environment; and OO__DB_PATH=computed/cirrus/$1 python src/visualize.py --port $0"'
+OO__DB_PATH=computed/cirrus python src/index.py --port 8052
+```
 
 ```sh
 

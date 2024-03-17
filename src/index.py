@@ -1,7 +1,10 @@
 import argparse
+from dash.dependencies import MATCH, ALL
+
 import dash
 import os
 import sqlite3
+from dash.dependencies import Input, Output, State, ALL
 
 db_directory = os.getenv('OO__DB_PATH')
 screen_directory_path = '/run/screen/'
@@ -52,13 +55,18 @@ def load_config_data(db_path):
       else:
         parsed_value = value
 
+      if isinstance(parsed_value, (int, float)):
+        formatted_value = f"{parsed_value:,}"
+      else:
+        formatted_value = parsed_value
+
       key_parts = key.split('__')
       d = config
       for part in key_parts[:-1]:
         if part not in d:
           d[part] = {}
         d = d[part]
-      d[key_parts[-1]] = parsed_value
+      d[key_parts[-1]] = formatted_value
   except sqlite3.Error:
     config = {}
 
@@ -82,6 +90,8 @@ app.layout = dash.html.Div(
           columns=[{"name": "Key", "id": "key"}, {"name": "Value", "id": "value"}],
           style_table={'overflowX': 'auto'},
           style_header={'display': 'none'},
+          active_cell={'row': 0, 'column': 0},  # Initialize with a default active cell
+          id={'type': 'dynamic-table', 'index': db_file},
         ),
         dash.html.A(
           "SEE VISUALIZATION",
@@ -100,6 +110,37 @@ app.layout = dash.html.Div(
   ],
   style={'display': 'flex', 'flex-wrap': 'wrap'}
 )
+
+
+
+@app.callback(
+    Output({'type': 'dynamic-table', 'index': MATCH}, 'style_data_conditional'),
+    [Input({'type': 'dynamic-table', 'index': MATCH}, 'active_cell')]
+)
+def highlight_row(active_cell):
+    if not active_cell:
+        return []
+
+    highlight_color = '#D2F3FF'  # Your chosen highlight color
+
+    return [
+        {
+            'if': {'row_index': active_cell['row']},
+            'backgroundColor': highlight_color,
+            'color': 'black'
+        },
+        {
+            'if': {'state': 'active'},  # This targets the active cell
+            'backgroundColor': highlight_color,
+            'border': 'none'  # Removing the border by setting it to 'none'
+        },
+        {
+            'if': {'state': 'selected'},  # This targets selected cells
+            'backgroundColor': highlight_color,
+            'border': 'none'  # Removing the border by setting it to 'none'
+        },
+    ]
+
 
 if __name__ == '__main__':
   # Parse command line arguments for the port
