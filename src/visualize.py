@@ -5,22 +5,30 @@ import dash
 import inspectify
 import math
 import os
+import sys
 import pandas
 import plotly
 import plotly.graph_objs as go
 import sqlite3
 import yaml
 
-env_yaml_path = '.env.yaml'
 config = None
 
 app = dash.Dash(__name__)
 app.title = 'Tuning OLL'
 
-
-
 def load_db_path():
-  return os.getenv('OO__DB_PATH')
+  db_path = os.getenv('OO__DB_PATH')
+
+  if db_path is None:
+      print("Error: Database path environment variable 'OO__DB_PATH' not set.")
+      sys.exit(1)
+
+  if not os.path.exists(db_path):
+      print(f"Error: Database file '{db_path}' does not exist.")
+      sys.exit(1)
+
+  return db_path
 
 def load_config_data():
     db_path = load_db_path()
@@ -61,9 +69,6 @@ def load_config_data():
     return config
 
 config = load_config_data()
-
-
-
 
 def flatten_config(config, parent_key=''):
     items = []
@@ -474,20 +479,6 @@ def update_fitness_lambda_plot(clickData, xaxis_choice):
   }
 
   return {'data': all_data, 'layout': layout}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 if __name__ == '__main__':
   app.run_server(debug=True)

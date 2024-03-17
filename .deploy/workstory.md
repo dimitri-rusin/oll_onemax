@@ -1,6 +1,39 @@
 
 
 
+
+
+
+
+
+```sh
+sbatch .deploy/generate.slurm config/March_11/attribute_gathering_uplifting_chump_kudos.yaml
+sbatch .deploy/generate.slurm config/March_11/bats_unlawful_crate_retype_sedative.yaml
+sbatch .deploy/generate.slurm config/March_11/bubbly_disfigure_flying_scion_girdle.yaml
+sbatch .deploy/generate.slurm config/March_11/camcorder_enticing_claw_slot_outburst.yaml
+sbatch .deploy/generate.slurm config/March_11/construct_handclap_pushover_overeager_runway.yaml
+sbatch .deploy/generate.slurm config/March_11/earmuff_overlay_grass_scrabble_procedure.yaml
+sbatch .deploy/generate.slurm config/March_11/exterior_wrought_flanked_diabetes_sudden.yaml
+sbatch .deploy/generate.slurm config/March_11/freebase_alike_upcoming_pummel_resilient.yaml
+sbatch .deploy/generate.slurm config/March_11/glaring_banish_nursery_hungrily_spooky.yaml
+sbatch .deploy/generate.slurm config/March_11/handwash_bonehead_scarring_duress_morphine.yaml
+sbatch .deploy/generate.slurm config/March_11/hurry_filing_raft_uneven_sierra.yaml
+sbatch .deploy/generate.slurm config/March_11/jugular_starter_padlock_herself_cosponsor.yaml
+sbatch .deploy/generate.slurm config/March_11/mutilator_smolder_flypaper_overhead_happiness.yaml
+sbatch .deploy/generate.slurm config/March_11/showing_rigor_certainty_drainable_strongman.yaml
+sbatch .deploy/generate.slurm config/March_11/spooky_grazing_dole_filter_opossum.yaml
+sbatch .deploy/generate.slurm config/March_11/superior_container_headband_majority_bunkmate.yaml
+sbatch .deploy/generate.slurm config/March_11/tackiness_circle_engraved_axis_wisdom.yaml
+sbatch .deploy/generate.slurm config/March_11/theme_yin_tartar_upstairs_pancake.yaml
+sbatch .deploy/generate.slurm config/March_11/tidbit_rudder_undying_recount_bronze.yaml
+sbatch .deploy/generate.slurm config/March_11/uncertain_avenue_deftly_outback_winking.yaml
+sbatch .deploy/generate.slurm config/March_11/untangled_shy_unread_dragster_scam.yaml
+sbatch .deploy/generate.slurm config/March_11/upload_antiquity_linguini_headpiece_glutinous.yaml
+sbatch .deploy/generate.slurm config/March_11/variety_poise_exes_animator_constrict.yaml
+sbatch .deploy/generate.slurm config/March_11/washable_underhand_poster_magnesium_drastic.yaml
+```
+
+
 ```sh
 python .deploy/range.py
 source (python .deploy/apply.py config/March_11/affection_directive_tavern_ruined_degrease.yaml | psub)
@@ -24,6 +57,8 @@ sacct --job=5531372
 
 
 OO__DB_PATH=./computed/cirrus/March_17_07h_39m_26s__dim_50.db python src/visualize.py
+OO__DB_PATH=computed/data/attribute_gathering_uplifting_chump_kudos.db python src/visualize.py
+OO__DB_PATH=computed/cirrus/attribute_gathering_uplifting_chump_kudos.db python src/visualize.py
 ```
 
 
