@@ -120,7 +120,7 @@ def q_learning_and_save_policy(total_episodes, learning_rate, gamma, epsilon, se
   num_training_timesteps = 0
 
   for episode_index in range(1, total_episodes + 1):
-    print("Training episode", episode_index)
+    print(f"Training episode {episode_index + 1} / {total_episodes}.")
     episode_seed = random_state.randint(100_000)
     fitness, done = training_environment.reset(episode_seed)[0], False
 
@@ -315,15 +315,6 @@ def main():
           d[part] = {}
         d = d[part]
       d[key_parts[-1]] = parsed_value
-
-  # Insert the date into the DB filepath.
-  now = datetime.datetime.now()
-  timestamp = now.strftime("%B_%d_%Hh_%Mm_%Ss")
-  base_path, file_name = config['db_path'].rsplit('/', 1)
-  file_name_without_extension, extension = file_name.split('.')
-  new_file_name = f"{timestamp}__{file_name_without_extension}.{extension}"
-  new_db_path = f"{base_path}/{new_file_name}"
-  config['db_path'] = new_db_path
 
   setup_config(config)
   conn = setup_database(config['db_path'])
