@@ -33,27 +33,25 @@ def write_config_to_yaml(directory, configs, wordlist, num_words):
 configs = [
   {
     "db_path": ["computed/data/<wordhash>.db"],
-    "episodes": [999_999_999_999],
     "epsilon": [0.1],
-    "evaluation_interval": [10],
+    "evaluation_interval": [100],
     "gamma": [1, 0.99, 0.995, 0.9998],
     "learning_rate": [0.1],
     "n": [50],
     "num_evaluation_episodes": [200],
-    "num_training_timesteps": [1_000_000],
+    "max_training_timesteps": [1_000_000],
     "probability_of_closeness_to_optimum": [0.5, 0.9],
     "random_seed": [42]
   },
   {
     "db_path": ["computed/data/<wordhash>.db"],
-    "episodes": [999_999_999_999],
     "epsilon": [0.1],
     "evaluation_interval": [10],
     "gamma": [1, 0.99, 0.995, 0.9998],
     "learning_rate": [0.1],
     "n": [500, 1_000],
     "num_evaluation_episodes": [25],
-    "num_training_timesteps": [1_000_000],
+    "max_training_timesteps": [1_000_000],
     "probability_of_closeness_to_optimum": [0.5, 0.9],
     "random_seed": [42]
   },
