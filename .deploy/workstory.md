@@ -10,7 +10,7 @@ python src/generate.py
 ```
 
 ```sh
-bash .deploy/generate.slurm config/dim_50.yaml
+bash .deploy/generate.slurm config/March_11/affection_directive_tavern_ruined_degrease.yaml
 
 sbatch .deploy/generate.slurm config/dim_50.yaml
 sbatch .deploy/generate.slurm config/dim_500.yaml

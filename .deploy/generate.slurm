@@ -50,5 +50,5 @@ yaml_path="$1"
 
 
 conda activate .deploy/conda_environment
-source <(python .deploy/apply.py config/dim_50.yaml)
+source <(python .deploy/apply.py $yaml_path)
 python src/generate.py
