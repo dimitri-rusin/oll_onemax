@@ -316,10 +316,6 @@ def main():
         d = d[part]
       d[key_parts[-1]] = parsed_value
 
-
-  print(config)
-
-
   # Insert the date into the DB filepath.
   now = datetime.datetime.now()
   timestamp = now.strftime("%B_%d_%Hh_%Mm_%Ss")

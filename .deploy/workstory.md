@@ -1,6 +1,13 @@
 
 
 
+```sh
+python .deploy/range.py
+source (python .deploy/apply.py config/March_11/affection_directive_tavern_ruined_degrease.yaml | psub)
+python src/generate.py
+
+
+```
 
 ```sh
 bash .deploy/generate.slurm config/dim_50.yaml
@@ -8,6 +15,15 @@ bash .deploy/generate.slurm config/dim_50.yaml
 sbatch .deploy/generate.slurm config/dim_50.yaml
 sbatch .deploy/generate.slurm config/dim_500.yaml
 sbatch .deploy/generate.slurm config/dim_1_000.yaml
+
+
+sacct --job=5531370
+sacct --job=5531371
+sacct --job=5531372
+
+
+
+OO__DB_PATH=./computed/cirrus/March_17_07h_39m_26s__dim_50.db python src/visualize.py
 ```
 
 
@@ -27,7 +43,7 @@ squeue -u $USER
 
 
 ```sh
-rsync -avz --progress cirrus:/work/sc122/sc122/dimitri_rusin/oll_onemax/data/ /home/dimitri/code/oll_onemax/computed/cirrus
+rsync -avz --progress cirrus:/work/sc122/sc122/dimitri_rusin/oll_onemax/computed/data/ /home/dimitri/code/oll_onemax/computed/cirrus
 
 OO__DB_PATH=./computed/cirrus/dim_50.db python src/visualize.py
 
