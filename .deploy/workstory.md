@@ -1,5 +1,25 @@
 
 
+```
+computed/data/untangled_shy_unread_dragster_scam.db
+
+
+OO__EXECUTION__EPISODE_ID_LOW=1 OO__EXECUTION__EPISODE_ID_HIGH=9999 OO__DB_PATH=computed/cirrus/untangled_shy_unread_dragster_scam.db OO__N=50 python tests/test_evaluation_episodes_with_rust.py
+
+```
+
+
+
+```sh
+
+ls computed/cirrus | nl -v 8050 | xargs -L 1 sh -c 'screen -dmS $0 fish -c "conda activate .deploy/conda_environment; and OO__DB_PATH=computed/cirrus/$1 python src/visualize.py --port $0"'
+
+screen -ls | grep 'Detached' | awk '{print $1}' | xargs -I {} screen -S {} -X quit
+
+screen -ls
+
+```
+
 
 
 
@@ -61,7 +81,15 @@ OO__DB_PATH=computed/data/attribute_gathering_uplifting_chump_kudos.db python sr
 OO__DB_PATH=computed/cirrus/attribute_gathering_uplifting_chump_kudos.db python src/visualize.py
 ```
 
+```
 
+
+OO__DB_PATH=computed/cirrus/attribute_gathering_uplifting_chump_kudos.db python src/visualize.py --port 8050 &
+OO__DB_PATH=computed/cirrus/bats_unlawful_crate_retype_sedative.db python src/visualize.py --port 8051 &
+OO__DB_PATH=computed/cirrus/bubbly_disfigure_flying_scion_girdle.db python src/visualize.py --port 8052 &
+OO__DB_PATH=computed/cirrus/camcorder_enticing_claw_slot_outburst.db python src/visualize.py --port 8053 &
+
+```
 
 
 ```sh

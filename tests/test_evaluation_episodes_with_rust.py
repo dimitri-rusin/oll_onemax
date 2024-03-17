@@ -87,9 +87,9 @@ class TestFunctionEvaluations(unittest.TestCase):
     episode_id_low = int(os.getenv('OO__EXECUTION__EPISODE_ID_LOW'))
     episode_id_high = int(os.getenv('OO__EXECUTION__EPISODE_ID_HIGH'))
     db_path = os.getenv('OO__DB_PATH')
-    n = int(os.getenv('OO__N'))
 
     config = load_config_data(db_path)
+    n = config['n']
     probability = config['probability_of_closeness_to_optimum']
 
     for episode_id in range(episode_id_low, episode_id_high + 1):

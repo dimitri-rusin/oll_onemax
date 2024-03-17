@@ -1,4 +1,6 @@
 from dash import callback_context
+import argparse
+import socket
 from dash import dcc, html, dash_table
 from dash.dependencies import Input, Output, State
 import dash
@@ -124,7 +126,8 @@ app.layout = html.Div([
         style_header={
             'backgroundColor': 'white',
             'fontWeight': 'bold'
-        }
+        },
+        active_cell={'row': 0, 'column': 0},  # Initialize with a default active cell
     ),
 
 
@@ -132,6 +135,35 @@ app.layout = html.Div([
 ], style={'fontFamily': 'Courier New, monospace', 'backgroundColor': 'rgba(0,0,0,0)'})
 
 
+
+
+@app.callback(
+    Output('config-table', 'style_data_conditional'),
+    [Input('config-table', 'active_cell')]
+)
+def highlight_row(active_cell):
+    if not active_cell:
+        return []
+
+    highlight_color = '#D2F3FF'  # Your chosen highlight color
+
+    return [
+        {
+            'if': {'row_index': active_cell['row']},
+            'backgroundColor': highlight_color,
+            'color': 'black'
+        },
+        {
+            'if': {'state': 'active'},  # This targets the active cell
+            'backgroundColor': highlight_color,
+            'border': 'none'  # Removing the border by setting it to 'none'
+        },
+        {
+            'if': {'state': 'selected'},  # This targets selected cells
+            'backgroundColor': highlight_color,
+            'border': 'none'  # Removing the border by setting it to 'none'
+        },
+    ]
 
 
 def did_we_click_the_mean_policy_curve(clickData):
@@ -480,5 +512,13 @@ def update_fitness_lambda_plot(clickData, xaxis_choice):
 
   return {'data': all_data, 'layout': layout}
 
+def is_port_open(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('localhost', port)) != 0
+
 if __name__ == '__main__':
-  app.run_server(debug=True)
+  parser = argparse.ArgumentParser(description='Run Flask app on a specified port.')
+  parser.add_argument('--port', type=int, default=8050, help='Port number (default: 8050)')
+  args = parser.parse_args()
+
+  app.run(debug=True, port=args.port)
