@@ -1,3 +1,4 @@
+from datetime import datetime
 import collections.abc
 import datetime
 import gymnasium
@@ -7,6 +8,7 @@ import onell_algs_rs
 import os
 import sqlite3
 import sys
+import time
 import time
 import yaml
 
@@ -96,7 +98,7 @@ class OneMaxOLL(gymnasium.Env):
 
 
 
-def q_learning_and_save_policy(learning_rate, gamma, epsilon, seed, database, evaluation_interval):
+def q_learning_and_save_policy(learning_rate, gamma, epsilon, database, evaluation_interval):
   """Perform standard Q-learning, update Q-table, choose actions, save and evaluate policies."""
 
   training_environment = OneMaxOLL(n=config['n'])
@@ -109,19 +111,18 @@ def q_learning_and_save_policy(learning_rate, gamma, epsilon, seed, database, ev
   num_q_table_updates = 0
   num_training_episodes = 0
   num_training_timesteps = 1
-  random_state = numpy.random.RandomState(seed)
   sum_initial_fitness = 0
   sum_squares_initial_fitness = 0
 
   policy = numpy.argmax(q_table, axis=1)
   policy_id = insert_policy_and_get_id(database, policy)
   insert_policy_info(database, policy_id, training_environment.num_total_timesteps, 0, training_environment.num_total_function_evaluations, 0, 0)
-  evaluation_seed = random_state.randint(100_000)
-  evaluate_policy(policy_id, config['db_path'], config['n'], evaluation_seed, config['num_evaluation_episodes'])
+  seed_for_generating_episode_seeds = numpy.random.randint(100_000)
+  evaluate_policy(policy_id, config['db_path'], config['n'], seed_for_generating_episode_seeds, config['num_evaluation_episodes'])
 
   while num_training_timesteps < max_training_timesteps:
     print(f"Training timestep {num_training_timesteps:,} / {max_training_timesteps:,}.")
-    episode_seed = random_state.randint(100_000)
+    episode_seed = numpy.random.randint(100_000)
     fitness, done = training_environment.reset(episode_seed)[0], False
 
     # Update sum and sum of squares for initial fitness
@@ -131,8 +132,8 @@ def q_learning_and_save_policy(learning_rate, gamma, epsilon, seed, database, ev
 
     while not done:
       # Choose an action based on the current fitness and Q-table (Epsilon-greedy strategy)
-      if random_state.random() < epsilon:
-        action = random_state.randint(training_environment.action_space.n)
+      if numpy.random.random() < epsilon:
+        action = numpy.random.randint(training_environment.action_space.n)
       else:
         action = numpy.argmax(q_table[fitness])
 
@@ -150,15 +151,15 @@ def q_learning_and_save_policy(learning_rate, gamma, epsilon, seed, database, ev
 
     # Evaluate policy at specified intervals
     if num_training_episodes % evaluation_interval == 0:
-      evaluation_seed = random_state.randint(100_000)
-      evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fitness, sum_squares_initial_fitness, q_table, database, training_environment, evaluation_seed)
+      seed_for_generating_episode_seeds = numpy.random.randint(100_000)
+      evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fitness, sum_squares_initial_fitness, q_table, database, training_environment, seed_for_generating_episode_seeds)
 
-  evaluation_seed = random_state.randint(100_000)
-  evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fitness, sum_squares_initial_fitness, q_table, database, training_environment, evaluation_seed)
+  seed_for_generating_episode_seeds = numpy.random.randint(100_000)
+  evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fitness, sum_squares_initial_fitness, q_table, database, training_environment, seed_for_generating_episode_seeds)
 
   return q_table
 
-def evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fitness, sum_squares_initial_fitness, q_table, database, training_environment, seed):
+def evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fitness, sum_squares_initial_fitness, q_table, database, training_environment, seed_for_generating_episode_seeds):
   mean_initial_fitness = sum_initial_fitness / num_training_episodes
   variance_initial_fitness = (sum_squares_initial_fitness / num_training_episodes) - (mean_initial_fitness ** 2)
 
@@ -173,7 +174,7 @@ def evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fit
     mean_initial_fitness,
     variance_initial_fitness,
   )
-  evaluate_policy(policy_id, config['db_path'], config['n'], seed, config['num_evaluation_episodes'])
+  evaluate_policy(policy_id, config['db_path'], config['n'], seed_for_generating_episode_seeds, config['num_evaluation_episodes'])
 
 def create_tables(database):
     """Create necessary tables in the database."""
@@ -213,16 +214,16 @@ def insert_policy_and_get_id(database, policy, policy_id=None):
                        [(policy_id, int(fitness), int(lambda_minus_one)) for fitness, lambda_minus_one in enumerate(policy)])
   return policy_id
 
-def evaluate_policy(policy_id, db_path, n, random_seed, num_evaluation_episodes):
+def evaluate_policy(policy_id, db_path, n, seed_for_generating_episode_seeds, num_evaluation_episodes):
   """Evaluate policy using multiple processes."""
   policy = fetch_policy(sqlite3.connect(db_path), policy_id)
 
-  random_state = numpy.random.RandomState(random_seed)
+  episode_seed_generator = numpy.random.RandomState(seed_for_generating_episode_seeds)
   episode_data = []  # List to store episode data
 
   for episode_index in range(num_evaluation_episodes):
     print(f"Policy {policy_id}: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
-    episode_seed = random_state.randint(100_000)
+    episode_seed = episode_seed_generator.randint(100_000)
     num_function_evaluations = evaluate_episode(policy, episode_seed)
 
     # Collect episode data
@@ -319,6 +320,9 @@ def main():
         d = d[part]
       d[key_parts[-1]] = parsed_value
 
+  current_time = datetime.datetime.now()
+  config['experiment_start_date'] = current_time.strftime("%Y-%B-%d %H:%M:%S") + " " + time.tzname[0]
+
   setup_config(config)
   database = setup_database(config['db_path'])
   create_tables(database)
@@ -326,7 +330,7 @@ def main():
   # Insert config into CONFIG table
   insert_config(database, flatten_dict(config))
 
-  initial_evaluation_seed = numpy.random.randint(0, 100_000)
+  seed_for_generating_episode_seeds = numpy.random.randint(100_000)
 
   # Insert and evaluate the special policy
   insert_special_policy(database, config['n'])
@@ -334,19 +338,15 @@ def main():
     -1,
     config['db_path'],
     config['n'],
-    initial_evaluation_seed,
+    seed_for_generating_episode_seeds,
     config['num_evaluation_episodes'],
   )
-
-  # Q-learning process
-  algo_and_evaluation_seed = numpy.random.randint(0, 100_000)
 
   # When initializing the database, pass the lock to the q_learning function
   q_table = q_learning_and_save_policy(
     config['learning_rate'],
     config['gamma'],
     config['epsilon'],
-    algo_and_evaluation_seed,
     database,
     config['evaluation_interval'],
   )
