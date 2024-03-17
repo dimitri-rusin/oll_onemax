@@ -25,5 +25,5 @@ source "$conda_sh_path"
 
 
 conda activate .deploy/conda_environment
-source <(python .deploy/apply_setting.py experiment_settings/dim_50.yaml)
+source <(python .deploy/apply.py config/dim_50.yaml)
 python src/generate.py

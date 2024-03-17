@@ -1,9 +1,24 @@
 
 
+
+
+```sh
+bash generate.slurm dim_50.yaml
+
+sbatch .deploy/generate.slurm config/dim_50.yaml
+sbatch .deploy/generate.slurm config/dim_500.yaml
+sbatch .deploy/generate.slurm config/dim_1_000.yaml
+```
+
+
+
+
 ```sh
 module load anaconda3/2023.09
 ./.deploy/BUILD
 ./.deploy/RUN
+
+squeue -u $USER
 ```
 
 
@@ -115,13 +130,6 @@ sacct --job=5523189
 
 ```
 
-```sh
-bash strategies.slurm dim_50.yaml
-
-sbatch strategies.slurm dim_50.yaml
-sbatch strategies.slurm dim_500.yaml
-sbatch strategies.slurm dim_1_000.yaml
-```
 
 
 
