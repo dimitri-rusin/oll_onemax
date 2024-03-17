@@ -26,7 +26,106 @@ screen -ls
 
 
 
+```
+bash .deploy/generate.slurm config/a_few_more_configs_March_17/abroad.yaml
 
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/abroad.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/activate.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/amused.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/angles.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/another.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/anthology.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/asleep.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/astrology.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/bats.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/bazooka.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/bubbly.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/buddy.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/camcorder.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/caring.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/caterer.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/cement.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/chief.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/clover.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/composer.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/confiding.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/conical.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/coronary.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/deceased.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/deck.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/demeaning.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/dial.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/dove.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/draw.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/dumping.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/earmuff.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/elaborate.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/ending.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/explode.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/exterior.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/feast.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/tip.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/flagstone.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/follow.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/freebase.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/gallantly.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/gigabyte.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/glowworm.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/handwash.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/hardcover.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/hurry.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/jasmine.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/jingle.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/juggle.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/jugular.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/keenly.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/lilac.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/matron.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/multiply.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/mummy.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/mutilator.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/nebula.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/overbuilt.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/overcrowd.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/pauper.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/pellet.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/petty.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/precook.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/protector.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/rearrange.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/retiring.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/revise.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/ridden.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/rind.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/scorecard.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/showing.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/sibling.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/skinny.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/sliver.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/smith.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/snitch.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/stand.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/starter.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/stoke.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/strut.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/superior.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/surrogate.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/theatrics.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/tidbit.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/trading.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/trimester.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/undefined.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/unpeeled.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/untangled.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/untidy.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/upload.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/variety.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/washable.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/washcloth.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/whacky.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/yapping.yaml
+sbatch .deploy/generate.slurm config/a_few_more_configs_March_17/zesty.yaml
+```
 
 
 
@@ -61,6 +160,10 @@ sbatch .deploy/generate.slurm config/March_11/washable_underhand_poster_magnesiu
 ```sh
 python .deploy/range.py
 source (python .deploy/apply.py config/March_11/attribute_gathering_uplifting_chump_kudos.yaml | psub)
+python src/generate.py
+
+
+source (python .deploy/apply.py config/a_few_more_configs_March_17/zesty.yaml | psub)
 python src/generate.py
 
 
