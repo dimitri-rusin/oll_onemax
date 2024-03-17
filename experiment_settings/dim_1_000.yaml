@@ -1,15 +1,11 @@
-random_seed: 42
-db_path: data/dim_1_000.db
+db_path: computed/data/dim_1_000.db
 episodes: 999_999_999_999
-num_training_timesteps: 1_000_000
 epsilon: 0.1
 evaluation_interval: 10
 gamma: 1
 learning_rate: 0.1
 n: 1_000
 num_evaluation_episodes: 200
-
-execution:
-  episode_id_low: 3
-  episode_id_high: 300
-  folder_path: data/executions/
+num_training_timesteps: 1_000_000
+probability_of_closeness_to_optimum: 0.9
+random_seed: 42

@@ -1,11 +1,26 @@
 
 
+```sh
+module load anaconda3/2023.09
+./.deploy/BUILD
+./.deploy/RUN
+```
+
 
 
 
 
 
 ```sh
+rsync -avz --progress cirrus:/work/sc122/sc122/dimitri_rusin/oll_onemax/data/ /home/dimitri/code/oll_onemax/computed/cirrus
+
+OO__DB_PATH=./computed/cirrus/dim_50.db python src/visualize.py
+
+OO__EXECUTION__EPISODE_ID_LOW=1 OO__EXECUTION__EPISODE_ID_HIGH=9999 OO__DB_PATH=./computed/cirrus/dim_50.db OO__N=50 python tests/test_evaluation_episodes_with_rust.py
+
+
+
+
 OO__EXECUTION__EPISODE_ID_LOW=1 OO__EXECUTION__EPISODE_ID_HIGH=9999 OO__DB_PATH=/home/dimitri/code/oll_onemax/computed/data/March_15_17h_39m_14s__dim_50.db OO__N=50 python tests/test_evaluation_episodes_with_rust.py
 
 OO__EXECUTION__EPISODE_ID_LOW=1 OO__EXECUTION__EPISODE_ID_HIGH=9999 OO__DB_PATH=/home/dimitri/code/oll_onemax/computed/data/March_15_10h_31m_28s__dim_50.db OO__N=50 python tests/test_evaluation_episodes_with_rust.py

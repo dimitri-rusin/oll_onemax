@@ -51,7 +51,7 @@ class OneMaxOLL(gymnasium.Env):
       self.current_solution = dacbench_adjustments.onell_algs.OneMax(
         self.n,
         rng = self.random_number_generator,
-        ratio_of_optimal_bits = 0.9,
+        ratio_of_optimal_bits = config['probability_of_closeness_to_optimum'],
       )
       initial_fitness = self.current_solution.fitness
 
@@ -241,7 +241,13 @@ def evaluate_episode(policy, episode_seed):
   for i in range(len(policy_list)):
     policy_list[i] += 1
 
-  num_function_evaluations = onell_algs_rs.onell_lambda(config['n'], policy_list, episode_seed, 999_999_999, config['probability_of_closeness_to_optimum'])
+  num_function_evaluations = onell_algs_rs.onell_lambda(
+    config['n'],
+    policy_list,
+    episode_seed,
+    999_999_999,
+    config['probability_of_closeness_to_optimum'],
+  )
 
   return num_function_evaluations
 
@@ -332,7 +338,13 @@ def main():
 
   # Insert and evaluate the special policy
   insert_special_policy(conn, config['n'])
-  evaluate_policy(-1, config['db_path'], config['n'], config['random_seed'], config['num_evaluation_episodes'])
+  evaluate_policy(
+    -1,
+    config['db_path'],
+    config['n'],
+    config['random_seed'],
+    config['num_evaluation_episodes'],
+  )
 
   # Q-learning process
   seed = numpy.random.randint(0, 100_000)
