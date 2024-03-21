@@ -436,9 +436,10 @@ def update_fitness_lambda_plot(clickData, xaxis_choice):
       # Fetch mean and variance of initial fitness for the selected policy
       cursor.execute('SELECT mean_initial_fitness, variance_initial_fitness FROM CONSTRUCTED_POLICIES WHERE policy_id = ?', (policy_id,))
       fitness_stats = cursor.fetchone()
-      mean_initial_fitness = fitness_stats[0]
-      variance_initial_fitness = fitness_stats[1]
-      std_dev_initial_fitness = math.sqrt(variance_initial_fitness)
+      if fitness_stats[0]:
+        mean_initial_fitness = fitness_stats[0]
+        variance_initial_fitness = fitness_stats[1]
+        std_dev_initial_fitness = math.sqrt(variance_initial_fitness)
 
       # Fetch fitness-lambda data for the selected policy
       cursor.execute('SELECT fitness, lambda_minus_one FROM POLICY_DETAILS WHERE policy_id = ?', (policy_id,))
@@ -462,42 +463,45 @@ def update_fitness_lambda_plot(clickData, xaxis_choice):
         )
       }
 
-
-      # Add shaded area for variance
-      # Upper bound line (mean + std_dev)
-      selected_policy_curve['data'].append(
-        go.Scatter(
-          x=[mean_initial_fitness + std_dev_initial_fitness] * 2,
-          y=[0, max([d[1] + 1 for d in fitness_lambda_data])],  # Adjust Y-axis limits
-          mode='lines',
-          line=dict(width=0),
-          showlegend=False
+      if fitness_stats[0]:
+        # Add shaded area for variance
+        # Upper bound line (mean + std_dev)
+        selected_policy_curve['data'].append(
+          go.Scatter(
+            x=[mean_initial_fitness + std_dev_initial_fitness] * 2,
+            y=[0, max([d[1] + 1 for d in fitness_lambda_data])],  # Adjust Y-axis limits
+            mode='lines',
+            line=dict(width=0),
+            showlegend=False
+          )
         )
-      )
 
-      # Lower bound line (mean - std_dev)
-      selected_policy_curve['data'].append(
-        go.Scatter(
-          x=[mean_initial_fitness - std_dev_initial_fitness] * 2,
-          y=[0, max([d[1] + 1 for d in fitness_lambda_data])],  # Adjust Y-axis limits
-          mode='lines',
-          fill='tonexty',
-          fillcolor='rgba(0, 255, 0, 0.2)',  # Semi-transparent green for the variance
-          line=dict(width=0),
-          name='Variance Initial Fitness'
+        # Lower bound line (mean - std_dev)
+        selected_policy_curve['data'].append(
+          go.Scatter(
+            x=[mean_initial_fitness - std_dev_initial_fitness] * 2,
+            y=[0, max([d[1] + 1 for d in fitness_lambda_data])],  # Adjust Y-axis limits
+            mode='lines',
+            fill='tonexty',
+            fillcolor='rgba(0, 255, 0, 0.2)',  # Semi-transparent green for the variance
+            line=dict(width=0),
+            name='Variance Initial Fitness'
+          )
         )
-      )
 
-      # Vertical line for the mean
-      selected_policy_curve['data'].append(
-        go.Scatter(
-          x=[mean_initial_fitness, mean_initial_fitness],
-          y=[0, max([d[1] + 1 for d in fitness_lambda_data])],  # Adjust Y-axis limits
-          mode='lines',
-          name=f'Mean Initial Fitness',
-          line=dict(color='green', width=2, dash='dot')
+        # Vertical line for the mean
+        selected_policy_curve['data'].append(
+          go.Scatter(
+            x=[mean_initial_fitness, mean_initial_fitness],
+            y=[0, max([d[1] + 1 for d in fitness_lambda_data])],  # Adjust Y-axis limits
+            mode='lines',
+            name=f'Mean Initial Fitness',
+            line=dict(color='green', width=2, dash='dot')
+          )
         )
-      )
+
+
+
 
   conn.close()
 
