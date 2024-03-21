@@ -1,5 +1,35 @@
 
 
+
+
+
+
+
+
+
+```sh
+source (python .deploy/apply.py config/March_11/attribute.yaml | psub)
+python src/generate.py
+```
+
+
+
+
+
+
+
+
+```sh
+rsync -avz --progress cirrus:/work/sc122/sc122/dimitri_rusin/oll_onemax/computed/data/ /home/dimitri/code/oll_onemax/computed/cirrus
+
+
+
+
+OO__DB_PATH=computed/cirrus_without_sqrt_dimensions_average_out_good_solutions/dim_500.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/data/attribute.db python src/visualize.py --port 9001
+
+```
+
 ```
 computed/data/untangled_shy_unread_dragster_scam.db
 
@@ -213,7 +243,6 @@ squeue -u $USER
 
 
 ```sh
-rsync -avz --progress cirrus:/work/sc122/sc122/dimitri_rusin/oll_onemax/computed/data/ /home/dimitri/code/oll_onemax/computed/cirrus
 
 OO__DB_PATH=./computed/cirrus/dim_50.db python src/visualize.py
 

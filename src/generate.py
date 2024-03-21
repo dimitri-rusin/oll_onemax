@@ -1,4 +1,10 @@
 from datetime import datetime
+from stable_baselines3 import PPO
+from stable_baselines3 import PPO
+from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.evaluation import evaluate_policy as ep
+from stable_baselines3.common.utils import set_random_seed
 import collections.abc
 import datetime
 import gymnasium
@@ -9,6 +15,7 @@ import os
 import sqlite3
 import sys
 import time
+import torch
 import yaml
 
 import sys
@@ -30,15 +37,15 @@ class OneMaxOLL(gymnasium.Env):
     self.seed = seed
     self.random = numpy.random.RandomState(self.seed)
     self.random_number_generator = numpy.random.default_rng(self.seed)
-    assert seed is None
     self.current_solution = None
     self.num_function_evaluations = None
     self.num_total_timesteps = 0
     self.num_total_function_evaluations = 0
 
-  def reset(self, episode_seed):
+  def reset(self, seed = None):
     # Use the provided seed for reproducibility
-    self.seed = episode_seed
+    if seed is not None:
+      self.seed = seed
     self.num_function_evaluations = 0
     self.random = numpy.random.RandomState(self.seed)
     self.random_number_generator = numpy.random.default_rng(self.seed)
@@ -54,7 +61,7 @@ class OneMaxOLL(gymnasium.Env):
 
     self.num_function_evaluations += 1 # there is one evaluation [call to .eval()] inside OneMax
 
-    return numpy.array([self.current_solution.fitness])
+    return numpy.array([self.current_solution.fitness]), {}
 
   def step(self, λ):
     if isinstance(λ, numpy.ndarray) and λ.size == 1:
@@ -87,7 +94,9 @@ class OneMaxOLL(gymnasium.Env):
     self.num_total_function_evaluations += num_evaluations_of_this_step
     self.num_total_timesteps += 1
 
-    return numpy.array([self.current_solution.fitness]), reward, terminated, info
+    truncated = False
+
+    return numpy.array([self.current_solution.fitness]), reward, terminated, truncated, info
 
 # ============== ENVIRONMENT - END ==============
 
@@ -110,12 +119,12 @@ def q_learning_and_save_policy(learning_rate, gamma, epsilon, database, evaluati
   policy = numpy.argmax(q_table, axis=1)
   policy_id = insert_policy_and_get_id(database, policy)
   insert_policy_info(database, policy_id, training_environment.num_total_timesteps, 0, training_environment.num_total_function_evaluations, 0, 0)
-  seed_for_generating_episode_seeds = numpy.random.randint(100_000)
+  seed_for_generating_episode_seeds = numpy.random.randint(999_999)
   evaluate_policy(policy_id, config['db_path'], config['n'], seed_for_generating_episode_seeds, config['num_evaluation_episodes'])
 
   while num_training_timesteps < max_training_timesteps:
     print(f"Training timestep {num_training_timesteps:,} / {max_training_timesteps:,}.")
-    episode_seed = numpy.random.randint(100_000)
+    episode_seed = numpy.random.randint(999_999)
     fitness, done = training_environment.reset(episode_seed)[0], False
 
     # Update sum and sum of squares for initial fitness
@@ -144,10 +153,10 @@ def q_learning_and_save_policy(learning_rate, gamma, epsilon, database, evaluati
 
     # Evaluate policy at specified intervals
     if num_training_episodes % evaluation_interval == 0:
-      seed_for_generating_episode_seeds = numpy.random.randint(100_000)
+      seed_for_generating_episode_seeds = numpy.random.randint(999_999)
       evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fitness, sum_squares_initial_fitness, q_table, database, training_environment, seed_for_generating_episode_seeds)
 
-  seed_for_generating_episode_seeds = numpy.random.randint(100_000)
+  seed_for_generating_episode_seeds = numpy.random.randint(999_999)
   evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fitness, sum_squares_initial_fitness, q_table, database, training_environment, seed_for_generating_episode_seeds)
 
   return q_table
@@ -216,7 +225,7 @@ def evaluate_policy(policy_id, db_path, n, seed_for_generating_episode_seeds, nu
 
   for episode_index in range(num_evaluation_episodes):
     print(f"Policy {policy_id}: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
-    episode_seed = episode_seed_generator.randint(100_000)
+    episode_seed = episode_seed_generator.randint(999_999)
     num_function_evaluations = evaluate_episode(policy, episode_seed)
 
     # Collect episode data
@@ -283,9 +292,9 @@ def drop_all_tables(db_path):
     cursor.executescript(drop_script)
 
 def main():
+
   global config
   config = {}
-
   for key, value in os.environ.items():
     if key.startswith("OO__"):
       # Remove 'OO__' prefix and convert to lowercase
@@ -312,20 +321,17 @@ def main():
           d[part] = {}
         d = d[part]
       d[key_parts[-1]] = parsed_value
-
   current_time = datetime.datetime.now()
   config['experiment_start_date'] = current_time.strftime("%Y-%B-%d %H:%M:%S") + " " + time.tzname[0]
 
-  setup_config(config)
+  numpy.random.seed(config['random_seed'])
+
   database = setup_database(config['db_path'])
   create_tables(database)
+  insert_config(database, config)
 
-  # Insert config into CONFIG table
-  insert_config(database, flatten_dict(config))
 
-  seed_for_generating_episode_seeds = numpy.random.randint(100_000)
-
-  # Insert and evaluate the special policy
+  seed_for_generating_episode_seeds = numpy.random.randint(999_999)
   insert_special_policy(database, config['n'])
   evaluate_policy(
     -1,
@@ -335,16 +341,113 @@ def main():
     config['num_evaluation_episodes'],
   )
 
-  # When initializing the database, pass the lock to the q_learning function
-  q_table = q_learning_and_save_policy(
-    config['learning_rate'],
-    config['gamma'],
-    config['epsilon'],
-    database,
-    config['evaluation_interval'],
+
+
+  num_evaluation_episodes = config['num_evaluation_episodes']
+
+  class PPOCallback(BaseCallback):
+    def __init__(self, verbose=0):
+      super(PPOCallback, self).__init__(verbose)
+      self.evaluation_results = []
+
+    def _on_step(self):
+
+      if self.num_timesteps % 8_000 == 0:
+
+        policy = {obs_value: self.model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
+        with sqlite3.connect(config['db_path']) as database:
+          cursor = database.cursor()
+          cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_total_timesteps) VALUES (?);', (self.num_timesteps,))
+          policy_id = cursor.lastrowid
+          policy_data = [(int(policy_id), int(fitness), int(lambda_minus_one)) for fitness, lambda_minus_one in policy.items()]
+          cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda_minus_one) VALUES (?, ?, ?);', policy_data)
+
+        seed_for_generating_episode_seeds = numpy.random.randint(999_999)
+        episode_seed_generator = numpy.random.RandomState(seed_for_generating_episode_seeds)
+        num_function_evaluations_list = []
+
+        for episode_index in range(num_evaluation_episodes):
+          print(f"Policy: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
+          episode_seed = episode_seed_generator.randint(999_999)
+          num_function_evaluations = evaluate_episode(policy, episode_seed)
+          num_function_evaluations_list.append((policy_id, episode_seed, None, num_function_evaluations))
+
+        with sqlite3.connect(config['db_path'], timeout=10) as database:
+          cursor = database.cursor()
+          cursor.executemany(
+            'INSERT INTO EVALUATION_EPISODES (policy_id, episode_seed, episode_length, num_function_evaluations) VALUES (?, ?, ?, ?);',
+            num_function_evaluations_list
+          )
+
+        only_fitness = [int(lambda_minus_one) for fitness, lambda_minus_one in policy.items()]
+        print("policy", only_fitness)
+
+      return True
+
+  n = config['n']
+  ppo_seed = numpy.random.randint(999_999)
+  set_random_seed(ppo_seed)
+  vec_env = make_vec_env(lambda: OneMaxOLL(n, ppo_seed), n_envs=1)
+
+  model = PPO(
+    "MlpPolicy",
+    vec_env,
+    policy_kwargs={'net_arch': [256, 256], 'activation_fn': torch.nn.ReLU},
+    learning_rate=0.0003,
+    n_steps=2048,
+    batch_size=64,
+    n_epochs=10,
+    gamma=0.99,
+    gae_lambda=0.95,
+    vf_coef=0.5,
+    ent_coef=0.0,
+    clip_range=0.2,
+    verbose=1,
   )
 
-  database.close()
+
+  policy = {obs_value: model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
+  with sqlite3.connect(config['db_path']) as database:
+    cursor = database.cursor()
+    cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_total_timesteps) VALUES (?);', (0,))
+    policy_id = cursor.lastrowid
+    policy_data = [(int(policy_id), int(fitness), int(lambda_minus_one)) for fitness, lambda_minus_one in policy.items()]
+    cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda_minus_one) VALUES (?, ?, ?);', policy_data)
+
+  seed_for_generating_episode_seeds = numpy.random.randint(999_999)
+  episode_seed_generator = numpy.random.RandomState(seed_for_generating_episode_seeds)
+  num_function_evaluations_list = []
+
+  for episode_index in range(num_evaluation_episodes):
+    print(f"Policy: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
+    episode_seed = episode_seed_generator.randint(999_999)
+    num_function_evaluations = evaluate_episode(policy, episode_seed)
+    num_function_evaluations_list.append((policy_id, episode_seed, None, num_function_evaluations))
+
+  with sqlite3.connect(config['db_path'], timeout=10) as database:
+    cursor = database.cursor()
+    cursor.executemany(
+      'INSERT INTO EVALUATION_EPISODES (policy_id, episode_seed, episode_length, num_function_evaluations) VALUES (?, ?, ?, ?);',
+      num_function_evaluations_list
+    )
+
+  only_fitness = [int(lambda_minus_one) for fitness, lambda_minus_one in policy.items()]
+  print("policy", only_fitness)
+
+
+  model.learn(total_timesteps=100_000, callback=PPOCallback())
+
+
+
+
+
+
+
+
+
+
+
+
 
 def flatten_dict(d, parent_key='', sep='__'):
     """
@@ -359,10 +462,6 @@ def flatten_dict(d, parent_key='', sep='__'):
         else:
             items.append((new_key, v))
     return dict(items)
-
-def setup_config(config):
-  """Setup global configuration parameters."""
-  numpy.random.seed(config['random_seed'])
 
 def setup_database(db_path):
   """Prepare the database, creating necessary directories and tables."""
