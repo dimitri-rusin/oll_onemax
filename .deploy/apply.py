@@ -30,12 +30,27 @@ def set_or_unset_env_vars(config, clean, shell):
             else:
                 print(f'unset {env_var_name}')
         else:
-            if isinstance(value, str):
-                print(f'export {env_var_name}="{value}"')
+            # Convert the value to a string
+            value_str = str(value)
+
+            # For Fish shell, use `set -x`
+            if 'fish' in shell:
+                if isinstance(value, str) or isinstance(value, list):
+                    # Use single quotes for string values in Fish shell
+                    print(f'set -x {env_var_name} \'{value_str}\'')
+                else:
+                    # Remove underscores for numerical values
+                    value_str = value_str.replace('_', '')
+                    print(f'set -x {env_var_name} {value_str}')
             else:
-                # Remove underscores for numerical values and export
-                value_str = str(value).replace('_', '')
-                print(f'export {env_var_name}={value_str}')
+                # For Bash and other shells, use `export`
+                if isinstance(value, str) or isinstance(value, list):
+                    # Use double quotes for string values in Bash
+                    print(f'export {env_var_name}=\"{value_str}\"')
+                else:
+                    # Remove underscores for numerical values
+                    value_str = value_str.replace('_', '')
+                    print(f'export {env_var_name}={value_str}')
 
 def flatten_config(config, parent_key=''):
     items = []
