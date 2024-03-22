@@ -436,7 +436,7 @@ def main():
   with sqlite3.connect(config['db_path']) as database:
     cursor = database.cursor()
     current_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_total_timesteps, created_at) VALUES (?, ?);', (self.num_timesteps, current_time))
+    cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_total_timesteps, created_at) VALUES (?, ?);', (0, current_time))
     policy_id = cursor.lastrowid
     policy_data = [(int(policy_id), int(fitness), int(lambda_minus_one)) for fitness, lambda_minus_one in policy.items()]
     cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda_minus_one) VALUES (?, ?, ?);', policy_data)
