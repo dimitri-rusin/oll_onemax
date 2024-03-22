@@ -1,4 +1,6 @@
 from dash import callback_context
+import base64
+from dash import dcc, html, dash_table, Dash
 from dash import dcc, html, dash_table
 from dash.dependencies import Input, Output, State
 import argparse
@@ -133,6 +135,15 @@ app.layout = html.Div([
         },
         active_cell={'row': 0, 'column': 0},  # Initialize with a default active cell
     ),
+    # Injecting CSS for text selection highlighting using a hidden Div
+    html.Div([
+        html.Link(rel="stylesheet", href="data:text/css;base64,{}".format(base64.b64encode(b"""
+            .dash-spreadsheet td div:focus::selection {
+                color: purple;
+            }
+        """).decode("ascii")))
+    ], style={'display': 'none'}),  # Hide the Div, only using it to inject CSS
+
 
 
 

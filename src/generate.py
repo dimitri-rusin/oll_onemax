@@ -352,7 +352,7 @@ def main():
 
     def _on_step(self):
 
-      if self.num_timesteps % 8_000 == 0:
+      if self.num_timesteps % config['num_timesteps_per_evaluation'] == 0:
 
         policy = {obs_value: self.model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
         with sqlite3.connect(config['db_path']) as database:
@@ -435,7 +435,7 @@ def main():
   print("policy", only_fitness)
 
 
-  model.learn(total_timesteps=100_000, callback=PPOCallback())
+  model.learn(total_timesteps=config['max_training_timesteps'], callback=PPOCallback())
 
 
 

@@ -8,8 +8,10 @@
 
 
 ```sh
-source (python .deploy/apply.py config/March_11/attribute.yaml | psub)
+source (python .deploy/apply.py config/ppo.yaml | psub)
 python src/generate.py
+
+OO__DB_PATH=computed/data/ppo.db python src/visualize.py --port 9001
 ```
 
 
