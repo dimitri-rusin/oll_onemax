@@ -183,7 +183,18 @@ def create_tables(database):
   with database:
     database.executescript('''
       CREATE TABLE IF NOT EXISTS POLICY_DETAILS (policy_id INTEGER, fitness INTEGER, lambda_minus_one INTEGER);
-      CREATE TABLE IF NOT EXISTS CONSTRUCTED_POLICIES (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_total_timesteps INTEGER, num_training_episodes INTEGER, num_total_function_evaluations INTEGER, mean_initial_fitness DOUBLE, variance_initial_fitness DOUBLE, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
+
+      CREATE TABLE IF NOT EXISTS CONSTRUCTED_POLICIES (
+        policy_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        num_total_timesteps INTEGER,
+        num_training_episodes INTEGER,
+        num_total_function_evaluations INTEGER,
+        mean_initial_fitness DOUBLE,
+        variance_initial_fitness DOUBLE,
+        created_at TEXT, -- ISO8601 format: 'YYYY-MM-DDTHH:MM:SS.SSSZ'
+        FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id)
+      );
+
       CREATE TABLE IF NOT EXISTS EVALUATION_EPISODES (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, num_function_evaluations INTEGER, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
       CREATE TABLE IF NOT EXISTS CONFIG (key TEXT PRIMARY KEY, value TEXT);
     ''')
@@ -335,8 +346,9 @@ def main():
         d = d[part]
       d[key_parts[-1]] = parsed_value
 
-  current_time = datetime.datetime.now()
-  config['experiment_start_date'] = current_time.strftime("%Y-%B-%d %H:%M:%S") + " " + time.tzname[0]
+
+
+
 
   numpy.random.seed(config['random_seed'])
 
@@ -366,10 +378,13 @@ def main():
 
       if self.num_timesteps % config['num_timesteps_per_evaluation'] == 0:
 
+
+
         policy = {obs_value: self.model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
         with sqlite3.connect(config['db_path']) as database:
           cursor = database.cursor()
-          cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_total_timesteps) VALUES (?);', (self.num_timesteps,))
+          current_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
+          cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_total_timesteps, created_at) VALUES (?, ?);', (self.num_timesteps, current_time))
           policy_id = cursor.lastrowid
           policy_data = [(int(policy_id), int(fitness), int(lambda_minus_one)) for fitness, lambda_minus_one in policy.items()]
           cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda_minus_one) VALUES (?, ?, ?);', policy_data)
@@ -420,7 +435,8 @@ def main():
   policy = {obs_value: model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
   with sqlite3.connect(config['db_path']) as database:
     cursor = database.cursor()
-    cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_total_timesteps) VALUES (?);', (0,))
+    current_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_total_timesteps, created_at) VALUES (?, ?);', (self.num_timesteps, current_time))
     policy_id = cursor.lastrowid
     policy_data = [(int(policy_id), int(fitness), int(lambda_minus_one)) for fitness, lambda_minus_one in policy.items()]
     cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda_minus_one) VALUES (?, ?, ?);', policy_data)
