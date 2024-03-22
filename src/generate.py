@@ -179,14 +179,14 @@ def evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fit
   evaluate_policy(policy_id, config['db_path'], config['n'], seed_for_generating_episode_seeds, config['num_evaluation_episodes'])
 
 def create_tables(database):
-    """Create necessary tables in the database."""
-    with database:
-        database.executescript('''
-          CREATE TABLE IF NOT EXISTS POLICY_DETAILS (policy_id INTEGER, fitness INTEGER, lambda_minus_one INTEGER);
-          CREATE TABLE IF NOT EXISTS CONSTRUCTED_POLICIES (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_total_timesteps INTEGER, num_training_episodes INTEGER, num_total_function_evaluations INTEGER, mean_initial_fitness DOUBLE, variance_initial_fitness DOUBLE, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
-          CREATE TABLE IF NOT EXISTS EVALUATION_EPISODES (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, num_function_evaluations INTEGER, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
-          CREATE TABLE IF NOT EXISTS CONFIG (key TEXT PRIMARY KEY, value TEXT);
-        ''')
+  """Create necessary tables in the database."""
+  with database:
+    database.executescript('''
+      CREATE TABLE IF NOT EXISTS POLICY_DETAILS (policy_id INTEGER, fitness INTEGER, lambda_minus_one INTEGER);
+      CREATE TABLE IF NOT EXISTS CONSTRUCTED_POLICIES (policy_id INTEGER PRIMARY KEY AUTOINCREMENT, num_total_timesteps INTEGER, num_training_episodes INTEGER, num_total_function_evaluations INTEGER, mean_initial_fitness DOUBLE, variance_initial_fitness DOUBLE, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
+      CREATE TABLE IF NOT EXISTS EVALUATION_EPISODES (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, num_function_evaluations INTEGER, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
+      CREATE TABLE IF NOT EXISTS CONFIG (key TEXT PRIMARY KEY, value TEXT);
+    ''')
 
 def insert_config(database, config):
     """Insert config dictionary into CONFIG table."""
@@ -292,7 +292,6 @@ def drop_all_tables(db_path):
     cursor.executescript(drop_script)
 
 def main():
-
   global config
   config = {}
   for key, value in os.environ.items():
@@ -303,8 +302,22 @@ def main():
       # Split the key at double underscores
       key_parts = key.split('__')
 
-      # Infer the type
-      if value.isdigit():
+      # Check for list-like structure and parse accordingly
+      if value.startswith("[") and value.endswith("]"):
+        value = value[1:-1]  # Remove the brackets
+        parsed_value = []
+        for item in value.split(','):
+          item = item.strip()  # Remove whitespace
+          if item.isdigit():
+            parsed_value.append(int(item))
+          elif all(char.isdigit() or char == '.' for char in item):
+            try:
+              parsed_value.append(float(item))
+            except ValueError:
+              parsed_value.append(item)
+          else:
+            parsed_value.append(item)
+      elif value.isdigit():
         parsed_value = int(value)
       elif all(char.isdigit() or char == '.' for char in value):
         try:
@@ -321,6 +334,7 @@ def main():
           d[part] = {}
         d = d[part]
       d[key_parts[-1]] = parsed_value
+
   current_time = datetime.datetime.now()
   config['experiment_start_date'] = current_time.strftime("%Y-%B-%d %H:%M:%S") + " " + time.tzname[0]
 
@@ -340,8 +354,6 @@ def main():
     seed_for_generating_episode_seeds,
     config['num_evaluation_episodes'],
   )
-
-
 
   num_evaluation_episodes = config['num_evaluation_episodes']
 
@@ -390,21 +402,20 @@ def main():
   vec_env = make_vec_env(lambda: OneMaxOLL(n, ppo_seed), n_envs=1)
 
   model = PPO(
-    "MlpPolicy",
+    config['ppo']['policy'],
     vec_env,
-    policy_kwargs={'net_arch': [256, 256], 'activation_fn': torch.nn.ReLU},
-    learning_rate=0.0003,
-    n_steps=2048,
-    batch_size=64,
-    n_epochs=10,
-    gamma=0.99,
-    gae_lambda=0.95,
-    vf_coef=0.5,
-    ent_coef=0.0,
-    clip_range=0.2,
-    verbose=1,
+    policy_kwargs = {'net_arch': config['ppo']['net_arch'], 'activation_fn': torch.nn.ReLU},
+    learning_rate = config['ppo']['learning_rate'],
+    n_steps = config['ppo']['n_steps'],
+    batch_size = config['ppo']['batch_size'],
+    n_epochs = config['ppo']['n_epochs'],
+    gamma = config['ppo']['gamma'],
+    gae_lambda = config['ppo']['gae_lambda'],
+    vf_coef = config['ppo']['vf_coef'],
+    ent_coef = config['ppo']['ent_coef'],
+    clip_range = config['ppo']['clip_range'],
+    verbose = 1,
   )
-
 
   policy = {obs_value: model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
   with sqlite3.connect(config['db_path']) as database:
@@ -436,18 +447,6 @@ def main():
 
 
   model.learn(total_timesteps=config['max_training_timesteps'], callback=PPOCallback())
-
-
-
-
-
-
-
-
-
-
-
-
 
 def flatten_dict(d, parent_key='', sep='__'):
     """

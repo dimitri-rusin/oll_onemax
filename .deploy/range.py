@@ -63,32 +63,32 @@ def write_config_to_yaml(directory, configs, wordlist, num_words):
 configs = [
   {
     "db_path": ["computed/data/<wordhash>.db"],
-    "epsilon": [0.2, 0.1, 0.01],
-    "evaluation_interval": [500],
-    "gamma": [1, 0.99, 0.995, 0.9998],
-    "learning_rate": [0.1, 0.2],
-    "n": [50],
-    "num_evaluation_episodes": [600],
-    "max_training_timesteps": [2_000_000],
-    "probability_of_closeness_to_optimum": [0.5, 0.9],
-    "random_seed": [42]
-  },
-  {
-    "db_path": ["computed/data/<wordhash>.db"],
-    "epsilon": [0.1, 0.01],
-    "evaluation_interval": [10],
-    "gamma": [1, 0.99, 0.995, 0.9998],
-    "learning_rate": [0.1],
-    "n": [500, 1_000, 2_000],
-    "num_evaluation_episodes": [25],
+    "num_timesteps_per_evaluation": [4_000],
+    "n": [80],
+    "num_evaluation_episodes": [1_000],
     "max_training_timesteps": [1_000_000],
-    "probability_of_closeness_to_optimum": [0.5, 0.9],
-    "random_seed": [42]
+    "probability_of_closeness_to_optimum": [0.5],
+    "random_seed": [42],
+
+    "ppo__policy": ["MlpPolicy"],
+    "ppo__net_arch": [
+      [128, 128],
+      [256, 256],
+    ],
+    "ppo__learning_rate": [0.0001, 0.0003, 0.001],
+    "ppo__n_steps": [2048],
+    "ppo__batch_size": [64],
+    "ppo__n_epochs": [20],
+    "ppo__gamma": [0.9995],
+    "ppo__gae_lambda": [0.95],
+    "ppo__vf_coef": [0.5],
+    "ppo__ent_coef": [0.0],
+    "ppo__clip_range": [0.1, 0.2, 0.3],
   },
 ]
 
 # Download from: https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt
 wordlist = load_wordlist('.deploy/eff_large_wordlist.txt')
-directory = 'config/a_few_more_configs_March_17'
+directory = 'config/ppo'
 os.makedirs(directory, exist_ok=True)
 write_config_to_yaml(directory, configs, wordlist, num_words=5)

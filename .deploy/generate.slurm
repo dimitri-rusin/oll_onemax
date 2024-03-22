@@ -6,7 +6,7 @@
 #SBATCH --partition=standard
 #SBATCH --qos=standard
 #SBATCH --tasks-per-node=1
-#SBATCH --time=11:00:00
+#SBATCH --time=7:00:00
 
 
 

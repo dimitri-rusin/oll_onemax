@@ -8,10 +8,21 @@
 
 
 ```sh
+source <(python .deploy/apply.py config/ppo.yaml)
+
+
 source (python .deploy/apply.py config/ppo.yaml | psub)
+
+source (python .deploy/apply.py config/ppo/celibacy.yaml | psub)
 python src/generate.py
 
 OO__DB_PATH=computed/data/ppo.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/ppo.db python src/visualize.py --port 9001
+
+
+bash .deploy/generate.slurm config/ppo.yaml
+. .deploy/generate.slurm config/ppo.yaml
+sbatch .deploy/generate.slurm config/ppo.yaml
 ```
 
 
