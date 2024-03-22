@@ -1,6 +1,31 @@
 
 
 
+There seems to be a problem when a generate python script creates the data/ directory, or any directory, we get:
+```
+Matplotlib created a temporary config/cache directory at /dev/shm/dimitri_rusin_5551730/matplotlib-sd8h8zr6 because the default path (/home/sc122/sc122/dimitri_rusin/.config/matplotlib) is not a writable directory; it is highly recommended to set the MPLCONFIGDIR environment variable to a writable directory, in particular to speed up the import of Matplotlib and to better support multiprocessing.
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Traceback (most recent call last):
+  File "/mnt/lustre/e1000/home/sc122/sc122/dimitri_rusin/oll_onemax/src/generate.py", line 476, in <module>
+    main()
+  File "/mnt/lustre/e1000/home/sc122/sc122/dimitri_rusin/oll_onemax/src/generate.py", line 343, in main
+    database = setup_database(config['db_path'])
+  File "/mnt/lustre/e1000/home/sc122/sc122/dimitri_rusin/oll_onemax/src/generate.py", line 471, in setup_database
+    os.makedirs(directory_path)
+  File "/mnt/lustre/e1000/home/sc122/sc122/dimitri_rusin/oll_onemax/.deploy/conda_environment/lib/python3.10/os.py", line 225, in makedirs
+    mkdir(name, mode)
+FileExistsError: [Errno 17] File exists: 'computed/data'
+```
+So, maybe it's better to create all directories in shell, instead of python which is run in multiple processes in parallel.
+With the computed/data/ directory already existing before the sbatch commands below are launched, no slurm output file contains a message like the above one.
+
+
 
 
 ```sh

@@ -185,6 +185,8 @@ def did_we_click_the_mean_policy_curve(clickData):
   # This value is 0, only because we insert the policy curve at the first position of the data list below.
   return clickData['points'][0]['curveNumber'] == 0
 
+
+
 @app.callback(
     Output('config-table', 'data'),
     [Input('policy-performance-plot', 'clickData')]
@@ -197,20 +199,29 @@ def update_config_table(clickData):
     x_value = clickData['points'][0]['x']
     y_value = clickData['points'][0]['y']
 
-
     point_index = clickData['points'][0]['pointIndex']
     policy_id = list(policy_id_to_x_values.keys())[point_index]
 
+    db_path = load_db_path()
+    created_at = ''
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT created_at FROM CONSTRUCTED_POLICIES WHERE policy_id = ?', (policy_id,))
+            result = cursor.fetchone()
+            if result:
+                created_at = result[0]
+    except sqlite3.Error as e:
+        print(f"SQLite error: {e}")
 
     # You can format these values and add them to your config data
     updated_config_data = flattened_config.copy()
     updated_config_data.append({'Key': 'Selected Policy X Value', 'Value': f"{x_value:,}"})
     updated_config_data.append({'Key': 'Selected Policy Y Value', 'Value': f"{y_value:,}"})
     updated_config_data.append({'Key': 'Policy ID', 'Value': f"{policy_id:,}"})
+    updated_config_data.append({'Key': 'Created At', 'Value': created_at})
 
     return updated_config_data
-
-
 
 
 
