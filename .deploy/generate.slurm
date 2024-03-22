@@ -9,6 +9,9 @@
 #SBATCH --time=7:00:00
 
 
+# Exit immediately on errors, treat unset variables as an error, and fail on error in any pipeline
+set -euo pipefail
+
 
 module load anaconda3/2023.09
 cd /work/sc122/sc122/dimitri_rusin/oll_onemax/

@@ -3,7 +3,29 @@
 
 
 
+```sh
+sbatch .deploy/generate.slurm config/ppo/bobbing.yaml
+sbatch .deploy/generate.slurm config/ppo/calamari.yaml
+sbatch .deploy/generate.slurm config/ppo/celibacy.yaml
+sbatch .deploy/generate.slurm config/ppo/denatured.yaml
+sbatch .deploy/generate.slurm config/ppo/glacial.yaml
+sbatch .deploy/generate.slurm config/ppo/gotten.yaml
+sbatch .deploy/generate.slurm config/ppo/iphone.yaml
+sbatch .deploy/generate.slurm config/ppo/laborer.yaml
+sbatch .deploy/generate.slurm config/ppo/moonscape.yaml
+sbatch .deploy/generate.slurm config/ppo/nerd.yaml
+sbatch .deploy/generate.slurm config/ppo/plunging.yaml
+sbatch .deploy/generate.slurm config/ppo/retention.yaml
+sbatch .deploy/generate.slurm config/ppo/send.yaml
+sbatch .deploy/generate.slurm config/ppo/shorts.yaml
+sbatch .deploy/generate.slurm config/ppo/vocalist.yaml
+sbatch .deploy/generate.slurm config/ppo/voyage.yaml
+sbatch .deploy/generate.slurm config/ppo/waltz.yaml
+sbatch .deploy/generate.slurm config/ppo/willed.yaml
 
+
+bash .deploy/generate.slurm config/ppo/gotten.yaml
+```
 
 
 
@@ -40,6 +62,7 @@ rsync -avz --progress cirrus:/work/sc122/sc122/dimitri_rusin/oll_onemax/computed
 
 OO__DB_PATH=computed/cirrus_without_sqrt_dimensions_average_out_good_solutions/dim_500.db python src/visualize.py --port 9001
 OO__DB_PATH=computed/data/attribute.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/gotten.yaml python src/visualize.py --port 9001
 
 ```
 
