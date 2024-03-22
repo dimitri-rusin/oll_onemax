@@ -51,7 +51,27 @@ fi
 yaml_path="$1"
 
 
-
 conda activate .deploy/conda_environment
-source <(python .deploy/apply.py $yaml_path)
+
+# Generate a temporary file in /tmp
+temp_env_file=$(mktemp /tmp/env.XXXXXX)
+
+# Generate the environment variables and capture them in the temporary file
+python .deploy/apply.py "$yaml_path" > "$temp_env_file"
+
+# Check if the previous command was successful
+if [ $? -ne 0 ]; then
+  echo "Error occurred in apply.py"
+  rm -f "$temp_env_file"
+  exit 1
+fi
+
+# Source the environment variables if the Python script was successful
+source "$temp_env_file"
+
+# Continue with the rest of the script
 python src/generate.py
+
+# Clean up the temporary file
+rm -f "$temp_env_file"
+

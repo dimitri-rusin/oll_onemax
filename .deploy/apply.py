@@ -9,11 +9,6 @@ def main():
   parser.add_argument('--clean', action='store_true', help='Clean the environment variables instead of setting them')
   args = parser.parse_args()
 
-  # Check if the file exists before proceeding
-  if not os.path.exists(args.filepath):
-    print(f"Error: '{args.filepath}' does not exist.", file=sys.stderr)
-    sys.exit(1)  # Exiting with status code 1 for error
-
   # Detect the shell type
   shell = os.getenv('SHELL')
 
