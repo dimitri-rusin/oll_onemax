@@ -28,7 +28,7 @@ config = None
 # ============== ENVIRONMENT - BEGIN ==============
 
 class OneMaxOLL(gymnasium.Env):
-  def __init__(self, n, seed=None):
+  def __init__(self, n, seed=None, reward_type = 'ONLY_EVALUATIONS'):
     super(OneMaxOLL, self).__init__()
     self.n = n
     num_actions = int(numpy.sqrt(n))
@@ -41,6 +41,7 @@ class OneMaxOLL(gymnasium.Env):
     self.num_function_evaluations = None
     self.num_total_timesteps = 0
     self.num_total_function_evaluations = 0
+    self.reward_type = reward_type
 
   def reset(self, seed = None):
     # Use the provided seed for reproducibility
@@ -86,7 +87,11 @@ class OneMaxOLL(gymnasium.Env):
       self.current_solution = y
 
     num_evaluations_of_this_step = int(ne1 + ne2)
-    reward = -num_evaluations_of_this_step
+    assert self.reward_type in ['ONLY_EVALUATIONS', 'EVALUATIONS_PLUS_FITNESS']
+    if self.reward_type == 'ONLY_EVALUATIONS':
+      reward = -num_evaluations_of_this_step
+    if self.reward_type == 'EVALUATIONS_PLUS_FITNESS':
+      reward = -num_evaluations_of_this_step + (self.current_solution.fitness - prior_fitness)
     terminated = self.current_solution.is_optimal()
     info = {}
 
@@ -99,84 +104,6 @@ class OneMaxOLL(gymnasium.Env):
     return numpy.array([self.current_solution.fitness]), reward, terminated, truncated, info
 
 # ============== ENVIRONMENT - END ==============
-
-def q_learning_and_save_policy(learning_rate, gamma, epsilon, database, evaluation_interval):
-  """Perform standard Q-learning, update Q-table, choose actions, save and evaluate policies."""
-
-  training_environment = OneMaxOLL(n=config['n'])
-
-  # Initialize a Q-table with zeros
-  num_observations = training_environment.observation_space.high[0] - training_environment.observation_space.low[0] + 1
-  q_table = numpy.zeros((num_observations, training_environment.action_space.n))
-
-  max_training_timesteps = config['max_training_timesteps']
-  num_q_table_updates = 0
-  num_training_episodes = 0
-  num_training_timesteps = 1
-  sum_initial_fitness = 0
-  sum_squares_initial_fitness = 0
-
-  policy = numpy.argmax(q_table, axis=1)
-  policy_id = insert_policy_and_get_id(database, policy)
-  insert_policy_info(database, policy_id, training_environment.num_total_timesteps, 0, training_environment.num_total_function_evaluations, 0, 0)
-  seed_for_generating_episode_seeds = numpy.random.randint(999_999)
-  evaluate_policy(policy_id, config['db_path'], config['n'], seed_for_generating_episode_seeds, config['num_evaluation_episodes'])
-
-  while num_training_timesteps < max_training_timesteps:
-    print(f"Training timestep {num_training_timesteps:,} / {max_training_timesteps:,}.")
-    episode_seed = numpy.random.randint(999_999)
-    fitness, done = training_environment.reset(episode_seed)[0], False
-
-    # Update sum and sum of squares for initial fitness
-    num_training_episodes += 1
-    sum_initial_fitness += fitness
-    sum_squares_initial_fitness += fitness ** 2
-
-    while not done:
-      # Choose an action based on the current fitness and Q-table (Epsilon-greedy strategy)
-      if numpy.random.random() < epsilon:
-        action = numpy.random.randint(training_environment.action_space.n)
-      else:
-        action = numpy.argmax(q_table[fitness])
-
-      # Perform the action
-      next_fitness, reward, done, _ = training_environment.step(action)
-      num_training_timesteps += 1
-
-      # Update the Q-table using the Q-learning algorithm
-      q_predict = q_table[fitness, action]
-      q_target = reward if done else reward + gamma * numpy.max(q_table[next_fitness[0]])
-      q_table[fitness, action] += learning_rate * (q_target - q_predict)
-      num_q_table_updates += 1
-
-      fitness = next_fitness[0]
-
-    # Evaluate policy at specified intervals
-    if num_training_episodes % evaluation_interval == 0:
-      seed_for_generating_episode_seeds = numpy.random.randint(999_999)
-      evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fitness, sum_squares_initial_fitness, q_table, database, training_environment, seed_for_generating_episode_seeds)
-
-  seed_for_generating_episode_seeds = numpy.random.randint(999_999)
-  evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fitness, sum_squares_initial_fitness, q_table, database, training_environment, seed_for_generating_episode_seeds)
-
-  return q_table
-
-def evaluate_policy_and_write_to_database(num_training_episodes, sum_initial_fitness, sum_squares_initial_fitness, q_table, database, training_environment, seed_for_generating_episode_seeds):
-  mean_initial_fitness = sum_initial_fitness / num_training_episodes
-  variance_initial_fitness = (sum_squares_initial_fitness / num_training_episodes) - (mean_initial_fitness ** 2)
-
-  policy = numpy.argmax(q_table, axis=1)
-  policy_id = insert_policy_and_get_id(database, policy)
-  insert_policy_info(
-    database,
-    policy_id,
-    training_environment.num_total_timesteps,
-    num_training_episodes,
-    training_environment.num_total_function_evaluations,
-    mean_initial_fitness,
-    variance_initial_fitness,
-  )
-  evaluate_policy(policy_id, config['db_path'], config['n'], seed_for_generating_episode_seeds, config['num_evaluation_episodes'])
 
 def create_tables(database):
   """Create necessary tables in the database."""
@@ -200,18 +127,16 @@ def create_tables(database):
     ''')
 
 def insert_config(database, config):
-    """Insert config dictionary into CONFIG table."""
-    with database:
-        for key, value in config.items():
-            database.execute('INSERT INTO CONFIG (key, value) VALUES (?, ?)', (key, str(value)))
+  """Insert config dictionary into CONFIG table."""
+  with database:
+    for key, value in config.items():
+      database.execute('INSERT INTO CONFIG (key, value) VALUES (?, ?)', (key, str(value)))
 
-def insert_special_policy(database, num_dimensions):
-  """Insert the special policy with policy_id -1."""
-
+def insert_theory_derived_policy(database, num_dimensions):
+  """Insert the theory-derived policy with policy_id -1."""
   policy_lambdas = [int(numpy.sqrt(num_dimensions / (num_dimensions - fitness))) - 1 for fitness in range(num_dimensions)]
   # - 1, because the environment expects lambda - 1.
-
-  policy_id = -1  # Special policy ID
+  policy_id = -1  # Theory-derived policy ID
   insert_policy_and_get_id(database, policy_lambdas, policy_id)
 
 def insert_policy_and_get_id(database, policy, policy_id=None):
@@ -258,8 +183,9 @@ def evaluate_episode(policy, episode_seed):
   for i in range(len(policy_list)):
     policy_list[i] += 1
 
+  n = len(policy)
   num_function_evaluations = onell_algs_rs.onell_lambda(
-    config['n'],
+    n,
     policy_list,
     episode_seed,
     999_999_999,
@@ -302,7 +228,17 @@ def drop_all_tables(db_path):
     drop_script = "\n".join([f"DROP TABLE IF EXISTS {table[0]};" for table in tables if table[0] != "sqlite_sequence"])
     cursor.executescript(drop_script)
 
-def main():
+def setup_database(db_path):
+  """Prepare the database, creating necessary directories and tables."""
+  drop_all_tables(db_path)
+
+  directory_path = os.path.dirname(db_path)
+  if not os.path.exists(directory_path):
+    os.makedirs(directory_path)
+
+  return sqlite3.connect(db_path)
+
+def load_config():
   global config
   config = {}
   for key, value in os.environ.items():
@@ -346,9 +282,9 @@ def main():
         d = d[part]
       d[key_parts[-1]] = parsed_value
 
+def main():
 
-
-
+  load_config()
 
   numpy.random.seed(config['random_seed'])
 
@@ -356,9 +292,8 @@ def main():
   create_tables(database)
   insert_config(database, config)
 
-
   seed_for_generating_episode_seeds = numpy.random.randint(999_999)
-  insert_special_policy(database, config['n'])
+  insert_theory_derived_policy(database, config['n'])
   evaluate_policy(
     -1,
     config['db_path'],
@@ -375,11 +310,7 @@ def main():
       self.evaluation_results = []
 
     def _on_step(self):
-
       if self.num_timesteps % config['num_timesteps_per_evaluation'] == 0:
-
-
-
         policy = {obs_value: self.model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
         with sqlite3.connect(config['db_path']) as database:
           cursor = database.cursor()
@@ -414,11 +345,14 @@ def main():
   n = config['n']
   ppo_seed = numpy.random.randint(999_999)
   set_random_seed(ppo_seed)
-  vec_env = make_vec_env(lambda: OneMaxOLL(n, ppo_seed), n_envs=1)
 
-  model = PPO(
+  ppo_agent = PPO(
     config['ppo']['policy'],
-    vec_env,
+    OneMaxOLL(
+      n = n,
+      seed = ppo_seed,
+      reward_type = config['reward_type'],
+    ),
     policy_kwargs = {'net_arch': config['ppo']['net_arch'], 'activation_fn': torch.nn.ReLU},
     learning_rate = config['ppo']['learning_rate'],
     n_steps = config['ppo']['n_steps'],
@@ -432,7 +366,7 @@ def main():
     verbose = 1,
   )
 
-  policy = {obs_value: model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
+  policy = {obs_value: ppo_agent.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
   with sqlite3.connect(config['db_path']) as database:
     cursor = database.cursor()
     current_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -461,32 +395,9 @@ def main():
   only_fitness = [int(lambda_minus_one) for fitness, lambda_minus_one in policy.items()]
   print("policy", only_fitness)
 
+  ppo_agent.learn(total_timesteps=config['max_training_timesteps'], callback=PPOCallback())
 
-  model.learn(total_timesteps=config['max_training_timesteps'], callback=PPOCallback())
 
-def flatten_dict(d, parent_key='', sep='__'):
-    """
-    Flatten a nested dictionary.
-    Example: {'a': {'b': 1}} becomes {'a__b': 1}
-    """
-    items = []
-    for k, v in d.items():
-        new_key = parent_key + sep + k if parent_key else k
-        if isinstance(v, collections.abc.MutableMapping):
-            items.extend(flatten_dict(v, new_key, sep=sep).items())
-        else:
-            items.append((new_key, v))
-    return dict(items)
-
-def setup_database(db_path):
-  """Prepare the database, creating necessary directories and tables."""
-  drop_all_tables(db_path)
-
-  directory_path = os.path.dirname(db_path)
-  if not os.path.exists(directory_path):
-    os.makedirs(directory_path)
-
-  return sqlite3.connect(db_path)
 
 if __name__ == '__main__':
   main()
