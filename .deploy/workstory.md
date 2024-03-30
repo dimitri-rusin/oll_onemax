@@ -1,6 +1,40 @@
 
 
 
+```sh
+source (python .deploy/apply.py config/ppo/bullseye.yaml | psub)
+python src/generate.py
+```
+
+
+
+
+
+
+
+
+```sh
+OO__DB_PATH=computed/cirrus/bobbing.db python src/visualize.py --port 9001 # changes a lot, still way above baseline
+OO__DB_PATH=computed/cirrus/calamari.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/celibacy.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/denatured.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/glacial.db python src/visualize.py --port 9001 # comes close to baseline, worsens over time
+OO__DB_PATH=computed/cirrus/gotten.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/iphone.db python src/visualize.py --port 9001 # also dips down, becomes worse
+OO__DB_PATH=computed/cirrus/laborer.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/moonscape.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/nerd.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/plunging.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/retention.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/send.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/shorts.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/vocalist.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/voyage.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/waltz.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/willed.db python src/visualize.py --port 9001
+```
+
+
 There seems to be a problem when a generate python script creates the data/ directory, or any directory, we get:
 ```
 Matplotlib created a temporary config/cache directory at /dev/shm/dimitri_rusin_5551730/matplotlib-sd8h8zr6 because the default path (/home/sc122/sc122/dimitri_rusin/.config/matplotlib) is not a writable directory; it is highly recommended to set the MPLCONFIGDIR environment variable to a writable directory, in particular to speed up the import of Matplotlib and to better support multiprocessing.
@@ -88,6 +122,7 @@ rsync -avz --progress cirrus:/work/sc122/sc122/dimitri_rusin/oll_onemax/computed
 OO__DB_PATH=computed/cirrus_without_sqrt_dimensions_average_out_good_solutions/dim_500.db python src/visualize.py --port 9001
 OO__DB_PATH=computed/data/attribute.db python src/visualize.py --port 9001
 OO__DB_PATH=computed/cirrus/gotten.yaml python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/glacial.db python src/visualize.py --port 9001
 
 ```
 
