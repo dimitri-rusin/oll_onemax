@@ -28,11 +28,16 @@ config = None
 # ============== ENVIRONMENT - BEGIN ==============
 
 class OneMaxOLL(gymnasium.Env):
-  def __init__(self, n, seed=None, reward_type = 'ONLY_EVALUATIONS'):
+  def __init__(self, n, seed=None, reward_type = 'ONLY_EVALUATIONS', action_space_type='DISCRETE', num_actions=None):
     super(OneMaxOLL, self).__init__()
     self.n = n
-    num_actions = int(numpy.sqrt(n))
-    self.action_space = gymnasium.spaces.Discrete(num_actions)
+    assert num_actions is not None
+    assert action_space_type in ['DISCRETE', 'CONTINUOUS']
+    if action_space_type == 'DISCRETE':
+      self.action_space = gymnasium.spaces.Discrete(num_actions)
+    if action_space_type == 'CONTINUOUS':
+      self.action_space = gymnasium.spaces.Box(low=0, high=num_actions - 1, shape=(1,), dtype=numpy.float64)
+
     self.observation_space = gymnasium.spaces.Box(low=0, high=n - 1, shape=(1,), dtype=numpy.int32)
     self.seed = seed
     self.random = numpy.random.RandomState(self.seed)
@@ -65,9 +70,12 @@ class OneMaxOLL(gymnasium.Env):
     return numpy.array([self.current_solution.fitness]), {}
 
   def step(self, λ):
+
     if isinstance(λ, numpy.ndarray) and λ.size == 1:
       λ = λ.item()
+
     λ += 1
+
     p = λ / self.n
     population_size = numpy.round(λ).astype(int)
     prior_fitness = self.current_solution.fitness
@@ -179,9 +187,12 @@ def evaluate_policy(policy_id, db_path, n, seed_for_generating_episode_seeds, nu
 def evaluate_episode(policy, episode_seed):
   """Simulate an episode based on the policy and return fitness at each step."""
 
-  policy_list = [policy[fitness] for fitness in policy]
-  for i in range(len(policy_list)):
-    policy_list[i] += 1
+  policy_list = []
+  for _, λ in policy.items():
+    if isinstance(λ, numpy.ndarray) and λ.size == 1:
+      λ = λ.item()
+    λ += 1
+    policy_list.append(λ)
 
   n = len(policy)
   num_function_evaluations = onell_algs_rs.onell_lambda(
@@ -352,6 +363,8 @@ def main():
       n = n,
       seed = ppo_seed,
       reward_type = config['reward_type'],
+      action_space_type = config['action_space_type'],
+      num_actions = config['num_lambdas'],
     ),
     policy_kwargs = {'net_arch': config['ppo']['net_arch'], 'activation_fn': torch.nn.ReLU},
     learning_rate = config['ppo']['learning_rate'],
