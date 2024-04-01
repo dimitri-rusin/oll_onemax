@@ -28,7 +28,15 @@ config = None
 # ============== ENVIRONMENT - BEGIN ==============
 
 class OneMaxOLL(gymnasium.Env):
-  def __init__(self, n, seed=None, reward_type = 'ONLY_EVALUATIONS', action_space_type='DISCRETE', num_actions=None):
+  def __init__(
+    self,
+    n,
+    seed=None,
+    reward_type = 'ONLY_EVALUATIONS',
+    action_space_type='DISCRETE',
+    num_actions=None,
+    state_space_type='ONE_HOT_ENCODED',
+  ):
     super(OneMaxOLL, self).__init__()
     self.n = n
     assert num_actions is not None
@@ -38,7 +46,12 @@ class OneMaxOLL(gymnasium.Env):
     if action_space_type == 'CONTINUOUS':
       self.action_space = gymnasium.spaces.Box(low=0, high=num_actions - 1, shape=(1,), dtype=numpy.float64)
 
-    self.observation_space = gymnasium.spaces.Box(low=0, high=n - 1, shape=(1,), dtype=numpy.int32)
+    if state_space_type == 'SCALAR_ENCODED':
+      self.observation_space = gymnasium.spaces.Box(low=0, high=n - 1, shape=(1,), dtype=numpy.int32)
+    if state_space_type == 'ONE_HOT_ENCODED':
+      self.observation_space = gymnasium.spaces.Box(low=0, high=1, shape=(n,), dtype=numpy.int32)
+    self.state_space_type = state_space_type
+
     self.seed = seed
     self.random = numpy.random.RandomState(self.seed)
     self.random_number_generator = numpy.random.default_rng(self.seed)
@@ -67,7 +80,13 @@ class OneMaxOLL(gymnasium.Env):
 
     self.num_function_evaluations += 1 # there is one evaluation [call to .eval()] inside OneMax
 
-    return numpy.array([self.current_solution.fitness]), {}
+    fitness_array = None
+    if self.state_space_type == 'SCALAR_ENCODED':
+      fitness_array = numpy.array([self.current_solution.fitness])
+    if self.state_space_type == 'ONE_HOT_ENCODED':
+      fitness_array = create_fitness_vector(self.current_solution.fitness)
+
+    return fitness_array, {}
 
   def step(self, λ):
 
@@ -109,9 +128,21 @@ class OneMaxOLL(gymnasium.Env):
 
     truncated = False
 
-    return numpy.array([self.current_solution.fitness]), reward, terminated, truncated, info
+    fitness_array = None
+    if self.state_space_type == 'SCALAR_ENCODED':
+      fitness_array = numpy.array([self.current_solution.fitness])
+    if self.state_space_type == 'ONE_HOT_ENCODED':
+      fitness_array = create_fitness_vector(self.current_solution.fitness)
+
+    return fitness_array, reward, terminated, truncated, info
 
 # ============== ENVIRONMENT - END ==============
+
+def create_fitness_vector(fitness):
+  fitness_vector = numpy.zeros(config['n'], dtype=numpy.int32)
+  if fitness < config['n']:
+    fitness_vector[fitness] = 1
+  return fitness_vector
 
 def create_tables(database):
   """Create necessary tables in the database."""
@@ -322,7 +353,12 @@ def main():
 
     def _on_step(self):
       if self.num_timesteps % config['num_timesteps_per_evaluation'] == 0:
-        policy = {obs_value: self.model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
+
+        if config['state_space_type'] == 'ONE_HOT_ENCODED':
+          policy = {obs_value: self.model.predict(create_fitness_vector(obs_value), deterministic=True)[0].item() for obs_value in range(n)}
+        if config['state_space_type'] == 'SCALAR_ENCODED':
+          policy = {obs_value: self.model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
+
         with sqlite3.connect(config['db_path']) as database:
           cursor = database.cursor()
           current_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -365,6 +401,7 @@ def main():
       reward_type = config['reward_type'],
       action_space_type = config['action_space_type'],
       num_actions = config['num_lambdas'],
+      state_space_type = config['state_space_type'],
     ),
     policy_kwargs = {'net_arch': config['ppo']['net_arch'], 'activation_fn': torch.nn.ReLU},
     learning_rate = config['ppo']['learning_rate'],
@@ -379,7 +416,11 @@ def main():
     verbose = 1,
   )
 
-  policy = {obs_value: ppo_agent.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
+  if config['state_space_type'] == 'ONE_HOT_ENCODED':
+    policy = {obs_value: ppo_agent.predict(create_fitness_vector(obs_value), deterministic=True)[0].item() for obs_value in range(n)}
+  if config['state_space_type'] == 'SCALAR_ENCODED':
+    policy = {obs_value: ppo_agent.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
+
   with sqlite3.connect(config['db_path']) as database:
     cursor = database.cursor()
     current_time = datetime.datetime.now(datetime.timezone.utc).isoformat()

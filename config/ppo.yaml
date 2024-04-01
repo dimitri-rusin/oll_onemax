@@ -1,7 +1,0 @@
-db_path: computed/data/ppo.db
-max_training_timesteps: 100_000
-n: 80
-num_evaluation_episodes: 1_000
-num_timesteps_per_evaluation: 4_000
-probability_of_closeness_to_optimum: 0.5
-random_seed: 42

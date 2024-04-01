@@ -1,9 +1,67 @@
 
 
+```sh
+sbatch .deploy/RUN_GENERATE config/ppo/anthology.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/chance.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/drank.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/exclude.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/gave.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/glacier.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/guy.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/handheld.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/mounted.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/pecan.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/penniless.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/plural.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/preschool.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/racing.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/sublease.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/timothy.yaml
+
+
+.deploy/RUN_GENERATE config/ppo/anthology.yaml &
+.deploy/RUN_GENERATE config/ppo/chance.yaml &
+.deploy/RUN_GENERATE config/ppo/drank.yaml &
+.deploy/RUN_GENERATE config/ppo/exclude.yaml &
+.deploy/RUN_GENERATE config/ppo/gave.yaml &
+.deploy/RUN_GENERATE config/ppo/glacier.yaml &
+.deploy/RUN_GENERATE config/ppo/guy.yaml &
+.deploy/RUN_GENERATE config/ppo/handheld.yaml &
+.deploy/RUN_GENERATE config/ppo/mounted.yaml &
+.deploy/RUN_GENERATE config/ppo/pecan.yaml &
+.deploy/RUN_GENERATE config/ppo/penniless.yaml &
+.deploy/RUN_GENERATE config/ppo/plural.yaml &
+.deploy/RUN_GENERATE config/ppo/preschool.yaml &
+.deploy/RUN_GENERATE config/ppo/racing.yaml &
+.deploy/RUN_GENERATE config/ppo/sublease.yaml &
+.deploy/RUN_GENERATE config/ppo/timothy.yaml &
+
+
+/home/dimitri/code/oll_onemax/config/ppo/chance.yaml
+/home/dimitri/code/oll_onemax/config/ppo/drank.yaml
+/home/dimitri/code/oll_onemax/config/ppo/exclude.yaml
+/home/dimitri/code/oll_onemax/config/ppo/gave.yaml
+/home/dimitri/code/oll_onemax/config/ppo/glacier.yaml
+/home/dimitri/code/oll_onemax/config/ppo/guy.yaml
+/home/dimitri/code/oll_onemax/config/ppo/handheld.yaml
+/home/dimitri/code/oll_onemax/config/ppo/mounted.yaml
+/home/dimitri/code/oll_onemax/config/ppo/pecan.yaml
+/home/dimitri/code/oll_onemax/config/ppo/penniless.yaml
+/home/dimitri/code/oll_onemax/config/ppo/plural.yaml
+/home/dimitri/code/oll_onemax/config/ppo/preschool.yaml
+/home/dimitri/code/oll_onemax/config/ppo/racing.yaml
+/home/dimitri/code/oll_onemax/config/ppo/sublease.yaml
+/home/dimitri/code/oll_onemax/config/ppo/timothy.yaml
+```
+
+
+
 
 ```sh
-source (python .deploy/apply.py config/ppo/bullseye.yaml | psub)
+source (python .deploy/apply.py config/ppo.yaml | psub)
 python src/generate.py
+
+OO__DB_PATH=computed/data/humble.db python src/visualize.py --port 9001
 ```
 
 
