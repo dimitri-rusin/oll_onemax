@@ -396,10 +396,10 @@ def main():
     OneMaxOLL(
       n = n,
       seed = ppo_seed,
-      reward_type = config['reward_type'],
-      action_type = config['action_type'],
       num_actions = config['num_lambdas'],
       state_type = config['state_type'],
+      action_type = config['action_type'],
+      reward_type = config['reward_type'],
     ),
     policy_kwargs = {'net_arch': config['ppo']['net_arch'], 'activation_fn': torch.nn.ReLU},
     learning_rate = config['ppo']['learning_rate'],

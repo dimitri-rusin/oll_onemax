@@ -62,17 +62,17 @@ def write_config_to_yaml(directory, configs, wordlist, num_words):
 # Define the configurations list with possible values
 configs = [
   {
-    "db_path": ["computed/data/<wordhash>.db"],
+    "db_path": ["computed/data/compare_cont_disc/<wordhash>.db"],
     "num_timesteps_per_evaluation": [4_000],
     "n": [80],
     "num_evaluation_episodes": [1_000],
     "max_training_timesteps": [1_000_000],
     "probability_of_closeness_to_optimum": [0.95],
-    "random_seed": [42, 1, 2, 3, 4, 5, 6, 7, 11, 44, 55, 66, 77, 88, 43, 41],
+    "random_seed": [88, 89, 90, 91],
     'num_lambdas': [8],
 
     'state_type': ['ONE_HOT_ENCODED'],
-    'action_type': ['DISCRETE'],
+    'action_type': ['DISCRETE', 'CONTINUOUS'],
     'reward_type': ['EVALUATIONS_PLUS_FITNESS'],
 
     "ppo__policy": ["MlpPolicy"],
@@ -93,6 +93,6 @@ configs = [
 
 # Download from: https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt
 wordlist = load_wordlist('.deploy/eff_large_wordlist.txt')
-directory = 'config/ppo'
+directory = 'config/compare_cont_disc'
 os.makedirs(directory, exist_ok=True)
 write_config_to_yaml(directory, configs, wordlist, num_words=5)
