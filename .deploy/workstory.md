@@ -19,6 +19,34 @@ sbatch .deploy/RUN_GENERATE config/ppo/sublease.yaml
 sbatch .deploy/RUN_GENERATE config/ppo/timothy.yaml
 
 
+
+OO__DB_PATH=computed/cirrus/anthology.db python src/visualize.py --port 9000 # stabil ab 84,000
+OO__DB_PATH=computed/cirrus/chance.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/drank.db python src/visualize.py --port 9002 # stabil ab 40,000
+OO__DB_PATH=computed/cirrus/exclude.db python src/visualize.py --port 9003 # stabil ab 4,000
+OO__DB_PATH=computed/cirrus/gave.db python src/visualize.py --port 9004
+OO__DB_PATH=computed/cirrus/glacier.db python src/visualize.py --port 9005
+OO__DB_PATH=computed/cirrus/guy.db python src/visualize.py --port 9006
+OO__DB_PATH=computed/cirrus/handheld.db python src/visualize.py --port 9007
+OO__DB_PATH=computed/cirrus/mounted.db python src/visualize.py --port 9008
+OO__DB_PATH=computed/cirrus/pecan.db python src/visualize.py --port 9009
+OO__DB_PATH=computed/cirrus/penniless.db python src/visualize.py --port 9010
+OO__DB_PATH=computed/cirrus/plural.db python src/visualize.py --port 9011 # stabil ab 96,000
+OO__DB_PATH=computed/cirrus/preschool.db python src/visualize.py --port 9012
+OO__DB_PATH=computed/cirrus/racing.db python src/visualize.py --port 9013
+OO__DB_PATH=computed/cirrus/sublease.db python src/visualize.py --port 9014
+OO__DB_PATH=computed/cirrus/timothy.db python src/visualize.py --port 9015
+
+
+
+
+
+
+
+
+
+
+
 .deploy/RUN_GENERATE config/ppo/anthology.yaml &
 .deploy/RUN_GENERATE config/ppo/chance.yaml &
 .deploy/RUN_GENERATE config/ppo/drank.yaml &

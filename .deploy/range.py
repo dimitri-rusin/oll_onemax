@@ -72,7 +72,7 @@ configs = [
     'reward_type': ['ONLY_EVALUATIONS', 'EVALUATIONS_PLUS_FITNESS'],
 
     'action_space_type': ['DISCRETE', 'CONTINUOUS'],
-    'num_lambdas': [8, 80],
+    'num_lambdas': [8],
     'state_space_type': ['SCALAR_ENCODED', 'ONE_HOT_ENCODED'],
 
     "ppo__policy": ["MlpPolicy"],
