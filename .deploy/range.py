@@ -68,12 +68,12 @@ configs = [
     "num_evaluation_episodes": [1_000],
     "max_training_timesteps": [1_000_000],
     "probability_of_closeness_to_optimum": [0.95],
-    "random_seed": [42],
-    'reward_type': ['ONLY_EVALUATIONS', 'EVALUATIONS_PLUS_FITNESS'],
-
-    'action_space_type': ['DISCRETE', 'CONTINUOUS'],
+    "random_seed": [42, 1, 2, 3, 4, 5, 6, 7, 11, 44, 55, 66, 77, 88, 43, 41],
     'num_lambdas': [8],
-    'state_space_type': ['SCALAR_ENCODED', 'ONE_HOT_ENCODED'],
+
+    'state_type': ['ONE_HOT_ENCODED'],
+    'action_type': ['DISCRETE'],
+    'reward_type': ['EVALUATIONS_PLUS_FITNESS'],
 
     "ppo__policy": ["MlpPolicy"],
     "ppo__net_arch": [

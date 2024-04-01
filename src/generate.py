@@ -33,24 +33,24 @@ class OneMaxOLL(gymnasium.Env):
     n,
     seed=None,
     reward_type = 'ONLY_EVALUATIONS',
-    action_space_type='DISCRETE',
+    action_type='DISCRETE',
     num_actions=None,
-    state_space_type='ONE_HOT_ENCODED',
+    state_type='ONE_HOT_ENCODED',
   ):
     super(OneMaxOLL, self).__init__()
     self.n = n
     assert num_actions is not None
-    assert action_space_type in ['DISCRETE', 'CONTINUOUS']
-    if action_space_type == 'DISCRETE':
+    assert action_type in ['DISCRETE', 'CONTINUOUS']
+    if action_type == 'DISCRETE':
       self.action_space = gymnasium.spaces.Discrete(num_actions)
-    if action_space_type == 'CONTINUOUS':
+    if action_type == 'CONTINUOUS':
       self.action_space = gymnasium.spaces.Box(low=0, high=num_actions - 1, shape=(1,), dtype=numpy.float64)
 
-    if state_space_type == 'SCALAR_ENCODED':
+    if state_type == 'SCALAR_ENCODED':
       self.observation_space = gymnasium.spaces.Box(low=0, high=n - 1, shape=(1,), dtype=numpy.int32)
-    if state_space_type == 'ONE_HOT_ENCODED':
+    if state_type == 'ONE_HOT_ENCODED':
       self.observation_space = gymnasium.spaces.Box(low=0, high=1, shape=(n,), dtype=numpy.int32)
-    self.state_space_type = state_space_type
+    self.state_type = state_type
 
     self.seed = seed
     self.random = numpy.random.RandomState(self.seed)
@@ -81,9 +81,9 @@ class OneMaxOLL(gymnasium.Env):
     self.num_function_evaluations += 1 # there is one evaluation [call to .eval()] inside OneMax
 
     fitness_array = None
-    if self.state_space_type == 'SCALAR_ENCODED':
+    if self.state_type == 'SCALAR_ENCODED':
       fitness_array = numpy.array([self.current_solution.fitness])
-    if self.state_space_type == 'ONE_HOT_ENCODED':
+    if self.state_type == 'ONE_HOT_ENCODED':
       fitness_array = create_fitness_vector(self.current_solution.fitness)
 
     return fitness_array, {}
@@ -129,9 +129,9 @@ class OneMaxOLL(gymnasium.Env):
     truncated = False
 
     fitness_array = None
-    if self.state_space_type == 'SCALAR_ENCODED':
+    if self.state_type == 'SCALAR_ENCODED':
       fitness_array = numpy.array([self.current_solution.fitness])
-    if self.state_space_type == 'ONE_HOT_ENCODED':
+    if self.state_type == 'ONE_HOT_ENCODED':
       fitness_array = create_fitness_vector(self.current_solution.fitness)
 
     return fitness_array, reward, terminated, truncated, info
@@ -325,15 +325,11 @@ def load_config():
       d[key_parts[-1]] = parsed_value
 
 def main():
-
   load_config()
-
   numpy.random.seed(config['random_seed'])
-
   database = setup_database(config['db_path'])
   create_tables(database)
   insert_config(database, config)
-
   seed_for_generating_episode_seeds = numpy.random.randint(999_999)
   insert_theory_derived_policy(database, config['n'])
   evaluate_policy(
@@ -343,8 +339,10 @@ def main():
     seed_for_generating_episode_seeds,
     config['num_evaluation_episodes'],
   )
-
   num_evaluation_episodes = config['num_evaluation_episodes']
+  n = config['n']
+
+
 
   class PPOCallback(BaseCallback):
     def __init__(self, verbose=0):
@@ -354,9 +352,9 @@ def main():
     def _on_step(self):
       if self.num_timesteps % config['num_timesteps_per_evaluation'] == 0:
 
-        if config['state_space_type'] == 'ONE_HOT_ENCODED':
+        if config['state_type'] == 'ONE_HOT_ENCODED':
           policy = {obs_value: self.model.predict(create_fitness_vector(obs_value), deterministic=True)[0].item() for obs_value in range(n)}
-        if config['state_space_type'] == 'SCALAR_ENCODED':
+        if config['state_type'] == 'SCALAR_ENCODED':
           policy = {obs_value: self.model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
 
         with sqlite3.connect(config['db_path']) as database:
@@ -389,19 +387,19 @@ def main():
 
       return True
 
-  n = config['n']
+
+
   ppo_seed = numpy.random.randint(999_999)
   set_random_seed(ppo_seed)
-
   ppo_agent = PPO(
     config['ppo']['policy'],
     OneMaxOLL(
       n = n,
       seed = ppo_seed,
       reward_type = config['reward_type'],
-      action_space_type = config['action_space_type'],
+      action_type = config['action_type'],
       num_actions = config['num_lambdas'],
-      state_space_type = config['state_space_type'],
+      state_type = config['state_type'],
     ),
     policy_kwargs = {'net_arch': config['ppo']['net_arch'], 'activation_fn': torch.nn.ReLU},
     learning_rate = config['ppo']['learning_rate'],
@@ -416,9 +414,10 @@ def main():
     verbose = 1,
   )
 
-  if config['state_space_type'] == 'ONE_HOT_ENCODED':
+  # ================== EVALUATION OF FIRST POLICY ==================================================
+  if config['state_type'] == 'ONE_HOT_ENCODED':
     policy = {obs_value: ppo_agent.predict(create_fitness_vector(obs_value), deterministic=True)[0].item() for obs_value in range(n)}
-  if config['state_space_type'] == 'SCALAR_ENCODED':
+  if config['state_type'] == 'SCALAR_ENCODED':
     policy = {obs_value: ppo_agent.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
 
   with sqlite3.connect(config['db_path']) as database:
@@ -448,6 +447,9 @@ def main():
 
   only_fitness = [int(lambda_minus_one) for fitness, lambda_minus_one in policy.items()]
   print("policy", only_fitness)
+  # ================== EVALUATION OF FIRST POLICY ==================================================
+
+
 
   ppo_agent.learn(total_timesteps=config['max_training_timesteps'], callback=PPOCallback())
 
