@@ -206,10 +206,10 @@ def evaluate_policy(policy_id, db_path, n, seed_for_generating_episode_seeds, nu
   for episode_index in range(num_evaluation_episodes):
     print(f"Policy {policy_id}: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
     episode_seed = episode_seed_generator.randint(999_999)
-    num_function_evaluations = evaluate_episode(policy, episode_seed)
+    num_function_evaluations, num_evaluation_timesteps = evaluate_episode(policy, episode_seed)
 
     # Collect episode data
-    episode_data.append((policy_id, episode_seed, None, num_function_evaluations))
+    episode_data.append((policy_id, episode_seed, num_evaluation_timesteps, num_function_evaluations))
 
   # Write all collected data to the database in a single transaction
   with sqlite3.connect(db_path, timeout=10) as database:
@@ -231,7 +231,7 @@ def evaluate_episode(policy, episode_seed):
     policy_list.append(λ)
 
   n = len(policy)
-  num_function_evaluations = onell_algs_rs.onell_lambda(
+  num_function_evaluations, num_evaluation_timesteps = onell_algs_rs.onell_lambda(
     n,
     policy_list,
     episode_seed,
@@ -239,7 +239,7 @@ def evaluate_episode(policy, episode_seed):
     config['probability_of_closeness_to_optimum'],
   )
 
-  return num_function_evaluations
+  return num_function_evaluations, num_evaluation_timesteps
 
 def fetch_policy(database, policy_id):
   """Fetch a policy from the database and reconstruct it as a dictionary."""
@@ -341,8 +341,8 @@ def evaluate_policy_and_write_to_db(num_timesteps, policy):
   for episode_index in range(num_evaluation_episodes):
     print(f"Policy: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
     episode_seed = episode_seed_generator.randint(999_999)
-    num_function_evaluations = evaluate_episode(policy, episode_seed)
-    num_function_evaluations_list.append((policy_id, episode_seed, None, num_function_evaluations))
+    num_function_evaluations, num_evaluation_timesteps = evaluate_episode(policy, episode_seed)
+    num_function_evaluations_list.append((policy_id, episode_seed, num_evaluation_timesteps, num_function_evaluations))
 
   with sqlite3.connect(config['db_path'], timeout=10) as database:
     cursor = database.cursor()

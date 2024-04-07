@@ -101,7 +101,7 @@ def filter_configs(configs, filter_expr):
       matching_db_paths.append(config.get('db_path'))
   return matching_db_paths
 
-def load_policy_performance_data(db_path, xaxis_choice):
+def load_policy_performance_data(db_path, xaxis_choice, yaxis_choice):
   conn = sqlite3.connect(db_path)
   cursor = conn.cursor()
 
@@ -122,8 +122,9 @@ def load_policy_performance_data(db_path, xaxis_choice):
 
   avg_function_evaluations, std_dev_evaluations = [], []
   for policy_id, _ in training_data:
-    cursor.execute('SELECT num_function_evaluations FROM EVALUATION_EPISODES WHERE policy_id = ?', (policy_id,))
+    cursor.execute(f'SELECT {yaxis_choice} FROM EVALUATION_EPISODES WHERE policy_id = ?', (policy_id,))
     evaluations = [e[0] for e in cursor.fetchall()]
+    assert evaluations[0] is not None, f"The database {db_path} has a table EVALUATION_EPISODES with a cell of column {yaxis_choice} that is NULL!"
     num_evaluation_episodes = len(evaluations)  # Assuming number of episodes is length of evaluations
 
     avg_evaluations = sum(evaluations) / len(evaluations) if evaluations else None
@@ -133,7 +134,7 @@ def load_policy_performance_data(db_path, xaxis_choice):
 
   policy_ids, num_training_timesteps_or_num_training_fes = zip(*training_data) if training_data else ([], [])
 
-  cursor.execute('SELECT num_function_evaluations FROM EVALUATION_EPISODES WHERE policy_id = -1')
+  cursor.execute(f'SELECT {yaxis_choice} FROM EVALUATION_EPISODES WHERE policy_id = -1')
   baseline_evaluations = [e[0] for e in cursor.fetchall()]
   baseline_avg_length = sum(baseline_evaluations) / len(baseline_evaluations)
   baseline_variance = sum((e - baseline_avg_length) ** 2 for e in baseline_evaluations) / (len(baseline_evaluations) - 1) if len(baseline_evaluations) > 1 else 0
@@ -154,8 +155,8 @@ def load_policy_performance_data(db_path, xaxis_choice):
   conn.close()
   return data
 
-def policy_performance(db_path, xaxis_choice):
-  data = load_policy_performance_data(db_path, xaxis_choice)
+def policy_performance(db_path, xaxis_choice, yaxis_choice):
+  data = load_policy_performance_data(db_path, xaxis_choice, yaxis_choice)
   # Define the layout with larger dimensions and enhanced appearance
   layout = go.Layout(
     titlefont=dict(size=24),  # Bigger title font size
@@ -197,7 +198,7 @@ def get_policy_id_for_timesteps(db_path, total_timesteps):
     print(f"SQLite error: {e}")
     return None
 
-def generate_fitness_lambda_plot(db_path, policy_total_timesteps):
+def generate_fitness_lambda_plot(db_path, policy_total_timesteps, xaxis_choice, yaxis_choice):
 
   conn = sqlite3.connect(db_path)
   cursor = conn.cursor()
@@ -215,6 +216,7 @@ def generate_fitness_lambda_plot(db_path, policy_total_timesteps):
   )
 
   policy_id = get_policy_id_for_timesteps(db_path, policy_total_timesteps)
+  assert policy_id is not None, f"The number of total timesteps {policy_total_timesteps:,} has resulted in a non-existing policy ID!"
 
   # Fetch mean and variance of initial fitness for the specified policy
   cursor.execute('SELECT mean_initial_fitness, variance_initial_fitness FROM CONSTRUCTED_POLICIES WHERE policy_id = ?', (policy_id,))
@@ -282,12 +284,12 @@ def generate_fitness_lambda_plot(db_path, policy_total_timesteps):
   training_data = cursor.fetchone()
   assert len(training_data) > 0, f"Policy ID {policy_id} missing!"
   _, num_training_timesteps_or_num_training_fes = training_data
-  cursor.execute('SELECT num_function_evaluations FROM EVALUATION_EPISODES WHERE policy_id = ?', (policy_id,))
+  cursor.execute(f'SELECT {yaxis_choice} FROM EVALUATION_EPISODES WHERE policy_id = ?', (policy_id,))
   evaluations = [e[0] for e in cursor.fetchall()]
   avg_evaluations = sum(evaluations) / len(evaluations) if evaluations else None
   std_dev = math.sqrt(sum((e - avg_evaluations) ** 2 for e in evaluations) / len(evaluations)) if evaluations else 0
 
-  cursor.execute('SELECT num_function_evaluations FROM EVALUATION_EPISODES WHERE policy_id = -1')
+  cursor.execute(f'SELECT {yaxis_choice} FROM EVALUATION_EPISODES WHERE policy_id = -1')
   baseline_evaluations = [e[0] for e in cursor.fetchall()]
   baseline_avg_length = sum(baseline_evaluations) / len(baseline_evaluations)
   baseline_variance = sum((e - baseline_avg_length) ** 2 for e in baseline_evaluations) / (len(baseline_evaluations) - 1) if len(baseline_evaluations) > 1 else 0
@@ -296,13 +298,14 @@ def generate_fitness_lambda_plot(db_path, policy_total_timesteps):
 
 
   print("Policy ID:", policy_id)
+  print("Y axis name:", yaxis_choice)
   print("Y axis:", "{:,}".format(num_training_timesteps_or_num_training_fes))
-  print("Num FEs (Mean):", avg_evaluations)
-  print("Num FEs (Mean - Stddev):", avg_evaluations - std_dev)
-  print("Num FEs (Mean + Stddev):", avg_evaluations + std_dev)
-  print("Baseline num FEs (Mean):", baseline_avg_length)
-  print("Baseline num FEs (Mean - Stddev):", baseline_avg_length - std_dev)
-  print("Baseline num FEs (Mean + Stddev):", baseline_avg_length + std_dev)
+  print("Y axis (Mean):", avg_evaluations)
+  print("Y axis (Mean - Stddev):", avg_evaluations - std_dev)
+  print("Y axis (Mean + Stddev):", avg_evaluations + std_dev)
+  print("Baseline y axis (Mean):", baseline_avg_length)
+  print("Baseline y axis (Mean - Stddev):", baseline_avg_length - baseline_std_dev)
+  print("Baseline y axis (Mean + Stddev):", baseline_avg_length + baseline_std_dev)
   # ================= PRINT END ====================================
 
   conn.close()
@@ -406,15 +409,17 @@ print_matching(db_folder_path, filter_expression)
 
 # ====================================================================================================================
 
-db_path = "../computed/cirrus/underhand.db"
+db_path = "../computed/data/shadily.db"
 display_config_as_dataframe(db_path)
 
 # ====================================================================================================================
 
 xaxis_choice = "num_total_timesteps"
-policy_performance(db_path, xaxis_choice)
+yaxis_choice = "num_function_evaluations"
+yaxis_choice = "episode_length"
+policy_performance(db_path, xaxis_choice, yaxis_choice)
 
 # ====================================================================================================================
 
-policy_total_timesteps = 120_000
-generate_fitness_lambda_plot(db_path, policy_total_timesteps)
+policy_total_timesteps = 2
+generate_fitness_lambda_plot(db_path, policy_total_timesteps, xaxis_choice, yaxis_choice)
