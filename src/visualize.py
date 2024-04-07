@@ -133,11 +133,9 @@ def load_policy_performance_data(db_path, xaxis_choice):
 
   policy_ids, num_training_timesteps_or_num_training_fes = zip(*training_data) if training_data else ([], [])
 
-  cursor.execute('SELECT AVG(num_function_evaluations) FROM EVALUATION_EPISODES WHERE policy_id = -1')
-  baseline_avg_length = 0
-
   cursor.execute('SELECT num_function_evaluations FROM EVALUATION_EPISODES WHERE policy_id = -1')
   baseline_evaluations = [e[0] for e in cursor.fetchall()]
+  baseline_avg_length = sum(baseline_evaluations) / len(baseline_evaluations)
   baseline_variance = sum((e - baseline_avg_length) ** 2 for e in baseline_evaluations) / (len(baseline_evaluations) - 1) if len(baseline_evaluations) > 1 else 0
   baseline_std_dev = math.sqrt(baseline_variance)
 
@@ -289,11 +287,22 @@ def generate_fitness_lambda_plot(db_path, policy_total_timesteps):
   avg_evaluations = sum(evaluations) / len(evaluations) if evaluations else None
   std_dev = math.sqrt(sum((e - avg_evaluations) ** 2 for e in evaluations) / len(evaluations)) if evaluations else 0
 
+  cursor.execute('SELECT num_function_evaluations FROM EVALUATION_EPISODES WHERE policy_id = -1')
+  baseline_evaluations = [e[0] for e in cursor.fetchall()]
+  baseline_avg_length = sum(baseline_evaluations) / len(baseline_evaluations)
+  baseline_variance = sum((e - baseline_avg_length) ** 2 for e in baseline_evaluations) / (len(baseline_evaluations) - 1) if len(baseline_evaluations) > 1 else 0
+  baseline_std_dev = math.sqrt(baseline_variance)
+
+
+
   print("Policy ID:", policy_id)
   print("Y axis:", "{:,}".format(num_training_timesteps_or_num_training_fes))
   print("Num FEs (Mean):", avg_evaluations)
   print("Num FEs (Mean - Stddev):", avg_evaluations - std_dev)
   print("Num FEs (Mean + Stddev):", avg_evaluations + std_dev)
+  print("Baseline num FEs (Mean):", baseline_avg_length)
+  print("Baseline num FEs (Mean - Stddev):", baseline_avg_length - std_dev)
+  print("Baseline num FEs (Mean + Stddev):", baseline_avg_length + std_dev)
   # ================= PRINT END ====================================
 
   conn.close()
