@@ -1,438 +1,204 @@
-from dash import callback_context
-import base64
-from dash import dcc, html, dash_table, Dash
-from dash import dcc, html, dash_table
-from dash.dependencies import Input, Output, State
-import argparse
-import dash
+import ast
 import inspectify
 import math
 import os
-import pandas
-import plotly
 import plotly.graph_objs as go
-import socket
 import sqlite3
-import sys
-import yaml
 
-config = None
+def load_config_data(db_path):
+  loaded_config = {}
+  try:
+    with sqlite3.connect(db_path) as conn:
+      cursor = conn.cursor()
+      cursor.execute("SELECT key, value FROM CONFIG")
+      rows = cursor.fetchall()
 
-app = dash.Dash(__name__)
-app.title = 'Tuning OLL'
-
-def load_db_path():
-  db_path = os.getenv('OO__DB_PATH')
-
-  if db_path is None:
-      print("Error: Database path environment variable 'OO__DB_PATH' not set.")
-      sys.exit(1)
-
-  if not os.path.exists(db_path):
-      print(f"Error: Database file '{db_path}' does not exist.")
-      sys.exit(1)
-
-  return db_path
-
-def load_config_data():
-    db_path = load_db_path()
-    config = {}
-
-    try:
-        with sqlite3.connect(db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT key, value FROM CONFIG")
-            rows = cursor.fetchall()
-
-        # Process each row to infer the type and construct a nested dictionary
-        config = {}
-        for key, value in rows:
-            # Infer the type
-            if value.isdigit():
-                parsed_value = int(value)
-            elif all(char.isdigit() or char == '.' for char in value):
-                try:
-                    parsed_value = float(value)
-                except ValueError:
-                    parsed_value = value
-            else:
-                parsed_value = value
-
-            # Create nested dictionaries based on key structure
-            key_parts = key.split('__')
-            d = config
-            for part in key_parts[:-1]:
-                if part not in d:
-                    d[part] = {}
-                d = d[part]
-            d[key_parts[-1]] = parsed_value
-    except sqlite3.Error:
-        # If the CONFIG table doesn't exist or any other SQL error occurs
-        config = {}
-
-    return config
-
-config = load_config_data()
-
-def flatten_config(config, parent_key=''):
-  items = []
-  for k, v in config.items():
-    new_key = f"{parent_key}__{k}" if parent_key else k
-    if isinstance(v, dict):
-      items.extend(flatten_config(v, new_key))
-    else:
-      if isinstance(v, (int, float)):
-        formatted_value = f"{v:,}"
+    # Process each row to infer the type and construct a nested dictionary
+    for key, value in rows:
+      # Infer the type
+      if value.isdigit():
+        parsed_value = int(value)
+      elif all(char.isdigit() or char == '.' for char in value):
+        try:
+          parsed_value = float(value)
+        except ValueError:
+          parsed_value = value
+      elif value.startswith('{') and value.endswith('}'):
+        try:
+          # Attempt to parse as a dictionary
+          parsed_value = ast.literal_eval(value)
+        except (ValueError, SyntaxError):
+          # If parsing fails, keep the original value
+          parsed_value = value
       else:
-        formatted_value = v
-      items.append({'Key': new_key, 'Value': formatted_value})
-  return items
+        parsed_value = value
 
-flattened_config = flatten_config(config)
+      # Create nested dictionaries based on key structure
+      key_parts = key.split('__')
+      d = loaded_config
+      for part in key_parts[:-1]:
+        if part not in d:
+          d[part] = {}
+        d = d[part]
+      d[key_parts[-1]] = parsed_value
+  except sqlite3.Error:
+    # If the CONFIG table doesn't exist or any other SQL error occurs
+    loaded_config = {}
 
+  return loaded_config
 
-app.layout = html.Div([
-    html.Div([
-        dcc.Graph(id='policy-performance-plot'),
-        dcc.Graph(id='fitness-lambda-plot'),
-        dcc.Checklist(
-            id='auto-update-switch',
-            options=[
-                {'label': 'Auto Update Plot Every 5 Seconds', 'value': 'ON'}
-            ],
-            value=['ON'],
-            style={'fontFamily': 'Courier New, monospace', 'color': 'RebeccaPurple'}
-        ),
-        dcc.Interval(
-            id='interval-component',
-            interval=5*1000,
-            n_intervals=0
-        )
-    ], style={'display': 'inline-block', 'width': '70%'}),
+def load_configs_from_folder(folder_path):
+  configs = []
+  for file in os.listdir(folder_path):
+    if file.endswith(".db"):
+      db_path = os.path.join(folder_path, file)
+      config = load_config_data(db_path)
+      config['db_path'] = db_path
+      configs.append(config)
+  return configs
 
-    html.Div([
-        dcc.Dropdown(
-            id='xaxis-selector',
-            options=[
-                {'label': 'Number of Training Episodes', 'value': 'num_training_episodes'},
-                {'label': 'Number of Total Function Evaluations', 'value': 'num_total_function_evaluations'},
-                {'label': 'Number of Total Timesteps', 'value': 'num_total_timesteps'},
-            ],
-            value='num_total_timesteps',
-            style={'width': '100%'}
-        ),
-    ], style={'display': 'inline-block', 'width': '25%', 'vertical-align': 'top'}),
+def format_value_for_expression(value):
+  if isinstance(value, str):
+    # Add quotes around strings
+    return f"\"{value}\""
+  return value
 
-    # DataTable for displaying config key-value pairs below the Fitness-Lambda plot
-    dash_table.DataTable(
-        id='config-table',
-        columns=[{"name": i, "id": i} for i in ['Key', 'Value']],
-        data=flattened_config,
-        style_cell={'textAlign': 'left'},
-        style_header={
-            'backgroundColor': 'white',
-            'fontWeight': 'bold'
-        },
-        active_cell={'row': 0, 'column': 0},  # Initialize with a default active cell
-    ),
-    # Injecting CSS for text selection highlighting using a hidden Div
-    html.Div([
-        html.Link(rel="stylesheet", href="data:text/css;base64,{}".format(base64.b64encode(b"""
-            .dash-spreadsheet td div:focus::selection {
-                color: purple;
-            }
-        """).decode("ascii")))
-    ], style={'display': 'none'}),  # Hide the Div, only using it to inject CSS
+def match_config_with_filter(config, filter_expr):
+  for key, value in filter_expr.items():
+    if isinstance(value, dict):
+      # Recursive call for nested dictionaries
+      if key not in config or not match_config_with_filter(config[key], value):
+        return False
+    elif isinstance(value, list):
+      # Handle lists of expressions
+      for i, expr in enumerate(value):
+        if i >= len(config.get(key, [])):
+          return False
+        config_value = format_value_for_expression(config[key][i])
+        expression = expr.replace("{}", str(config_value))
+        condition = eval(expression)
+        assert type(condition) == bool, f"Filter {key}:{expression} must express a bool."
+        if not condition:
+          return False
+    else:
+      # Handle individual expressions
+      config_value = format_value_for_expression(config.get(key))
+      expression = value.replace("{}", str(config_value))
+      condition = eval(expression)
+      assert type(condition) == bool, f"Filter {key}:{expression} must express a bool."
+      if not condition:
+        return False
+  return True
 
+def filter_configs(configs, filter_expr):
+  matching_db_paths = []
+  for config in configs:
+    if match_config_with_filter(config, filter_expr):
+      matching_db_paths.append(config.get('db_path'))
+  return matching_db_paths
 
-
-
-], style={'fontFamily': 'Courier New, monospace', 'backgroundColor': 'rgba(0,0,0,0)'})
-
-
-
-
-@app.callback(
-    Output('config-table', 'style_data_conditional'),
-    [Input('config-table', 'active_cell')]
-)
-def highlight_row(active_cell):
-    if not active_cell:
-        return []
-
-    highlight_color = '#D2F3FF'  # Your chosen highlight color
-
-    return [
-        {
-            'if': {'row_index': active_cell['row']},
-            'backgroundColor': highlight_color,
-            'color': 'black'
-        },
-        {
-            'if': {'state': 'active'},  # This targets the active cell
-            'backgroundColor': highlight_color,
-            'border': 'none'  # Removing the border by setting it to 'none'
-        },
-        {
-            'if': {'state': 'selected'},  # This targets selected cells
-            'backgroundColor': highlight_color,
-            'border': 'none'  # Removing the border by setting it to 'none'
-        },
-    ]
-
-
-def did_we_click_the_mean_policy_curve(clickData):
-  # This value is 0, only because we insert the policy curve at the first position of the data list below.
-  return clickData['points'][0]['curveNumber'] == 0
-
-
-
-@app.callback(
-    Output('config-table', 'data'),
-    [Input('policy-performance-plot', 'clickData')]
-)
-def update_config_table(clickData):
-    if clickData is None or not did_we_click_the_mean_policy_curve(clickData):
-        raise dash.exceptions.PreventUpdate
-
-    # Extracting x and y values from the clicked point
-    x_value = clickData['points'][0]['x']
-    y_value = clickData['points'][0]['y']
-
-    point_index = clickData['points'][0]['pointIndex']
-    policy_id = list(policy_id_to_x_values.keys())[point_index]
-
-    db_path = load_db_path()
-    created_at = ''
-    try:
-        with sqlite3.connect(db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT created_at FROM CONSTRUCTED_POLICIES WHERE policy_id = ?', (policy_id,))
-            result = cursor.fetchone()
-            if result:
-                created_at = result[0]
-    except sqlite3.Error as e:
-        print(f"SQLite error: {e}")
-
-    # You can format these values and add them to your config data
-    updated_config_data = flattened_config.copy()
-    updated_config_data.append({'Key': 'Selected Policy X Value', 'Value': f"{x_value:,}"})
-    updated_config_data.append({'Key': 'Selected Policy Y Value', 'Value': f"{y_value:,}"})
-    updated_config_data.append({'Key': 'Policy ID', 'Value': f"{policy_id:,}"})
-    updated_config_data.append({'Key': 'Created At', 'Value': created_at})
-
-    return updated_config_data
-
-
-
-
-
-
-
-# Stylish layout for plots
-stylish_layout = {
-  'title': {'x': 0.5},
-  'font': {'family': 'Courier New, monospace', 'size': 18, 'color': 'RebeccaPurple'},
-  'paper_bgcolor': 'rgba(0,0,0,0)',
-  'plot_bgcolor': 'rgba(245, 245, 245, 1)',
-  'gridcolor': 'LightPink',
-  'gridwidth': 1
-}
-
-# Global variable to store the mapping of policy IDs to their x-values
-policy_id_to_x_values = {}
-
-
-
-
-
-
-
-@app.callback(
-    Output('policy-performance-plot', 'figure'),
-    [Input('policy-performance-plot', 'clickData'),
-     Input('interval-component', 'n_intervals'),
-     Input('auto-update-switch', 'value'),
-     Input('xaxis-selector', 'value')]
-)
-def load_policy_performance_data(clickData, n_intervals, auto_update_value, xaxis_choice):
-  global policy_id_to_x_values
-
-  trigger_id = callback_context.triggered[0]['prop_id'].split('.')[0]
-
-  # Only update if auto-update is switched on
-  if not (trigger_id == 'policy-performance-plot' or 'ON' in auto_update_value):
-    raise dash.exceptions.PreventUpdate
-
-  db_path = load_db_path()
+def load_policy_performance_data(db_path, xaxis_choice):
   conn = sqlite3.connect(db_path)
   cursor = conn.cursor()
 
-  # Modify the SQL query based on the x-axis choice
-  x_axis_sql_column = xaxis_choice
-  cursor.execute(f'SELECT policy_id, {x_axis_sql_column} FROM CONSTRUCTED_POLICIES WHERE policy_id >= 1')
+  # Execute SQL query based on x-axis choice
+  cursor.execute(f'SELECT policy_id, {xaxis_choice} FROM CONSTRUCTED_POLICIES WHERE policy_id >= 1')
   training_data = cursor.fetchall()
 
-
-
-
   try:
-    # Attempt to execute the query with all three columns
     cursor.execute('SELECT policy_id, num_training_episodes, num_total_function_evaluations, num_total_timesteps FROM CONSTRUCTED_POLICIES WHERE policy_id >= 1')
     rows = cursor.fetchall()
-
-    # Update the mapping of policy IDs to their x-values for all three columns
     policy_id_to_x_values = {policy_id: {column_name: value for column_name, value in zip(['num_training_episodes', 'num_total_function_evaluations', 'num_total_timesteps'], row)}
-                             for policy_id, *row in rows}
+                 for policy_id, *row in rows}
   except sqlite3.OperationalError:
-    # If the query fails due to missing columns, try a query with only the num_training_episodes column
     cursor.execute('SELECT policy_id, num_training_episodes FROM CONSTRUCTED_POLICIES WHERE policy_id >= 1')
     rows = cursor.fetchall()
-
-    # Update the mapping of policy IDs to their x-values for only the available column
     policy_id_to_x_values = {policy_id: {'num_training_episodes': num_training_episodes}
-                             for policy_id, num_training_episodes in rows}
+                 for policy_id, num_training_episodes in rows}
 
-
-
-
-
-  # Calculate average number of function evaluations and standard deviation for each policy
-  avg_function_evaluations = []
-  std_dev_evaluations = []
+  avg_function_evaluations, std_dev_evaluations = [], []
   for policy_id, _ in training_data:
     cursor.execute('SELECT num_function_evaluations FROM EVALUATION_EPISODES WHERE policy_id = ?', (policy_id,))
     evaluations = [e[0] for e in cursor.fetchall()]
+    num_evaluation_episodes = len(evaluations)  # Assuming number of episodes is length of evaluations
 
-    # Calculate average
-    num_evaluation_episodes = None
-    # num_evaluation_episodes = config['num_evaluation_episodes']
-    if num_evaluation_episodes is None:
-      num_evaluation_episodes = 1
-
-    if len(evaluations) >= num_evaluation_episodes:
-      avg_evaluations = sum(evaluations) / len(evaluations)
-      # Calculate standard deviation
-      std_dev = math.sqrt(sum((e - avg_evaluations) ** 2 for e in evaluations) / len(evaluations))
-    else:
-      avg_evaluations = None
-      std_dev = 0
-
+    avg_evaluations = sum(evaluations) / len(evaluations) if evaluations else None
+    std_dev = math.sqrt(sum((e - avg_evaluations) ** 2 for e in evaluations) / len(evaluations)) if evaluations else 0
     avg_function_evaluations.append(avg_evaluations if avg_evaluations is not None else 0)
     std_dev_evaluations.append(std_dev)
 
-
-
-
   policy_ids, num_episodes = zip(*training_data) if training_data else ([], [])
 
-  # Fetch baseline average episode length
   cursor.execute('SELECT AVG(num_function_evaluations) FROM EVALUATION_EPISODES WHERE policy_id = -1')
-  baseline_result = cursor.fetchone()
-  baseline_avg_length = baseline_result[0] if baseline_result else 0
+  baseline_avg_length = 0
 
-
-
-
-
-  # Fetch baseline average episode length
   cursor.execute('SELECT num_function_evaluations FROM EVALUATION_EPISODES WHERE policy_id = -1')
   baseline_evaluations = [e[0] for e in cursor.fetchall()]
-  baseline_avg_length = sum(baseline_evaluations) / len(baseline_evaluations) if baseline_evaluations else 0
-
-  # Calculate the variance for baseline evaluations
   baseline_variance = sum((e - baseline_avg_length) ** 2 for e in baseline_evaluations) / (len(baseline_evaluations) - 1) if len(baseline_evaluations) > 1 else 0
   baseline_std_dev = math.sqrt(baseline_variance)
 
-  # Calculate upper and lower bounds for the baseline
   baseline_upper_bound = [baseline_avg_length + baseline_std_dev] * len(num_episodes)
   baseline_lower_bound = [baseline_avg_length - baseline_std_dev] * len(num_episodes)
 
-  data = []
-
-  # Determine if a point has been clicked and find the corresponding policy ID
-  selected_point = None
-  if clickData and did_we_click_the_mean_policy_curve(clickData):
-    point_index = clickData['points'][0]['pointIndex']
-    # Check if the point index exists in policy_id_to_x_values
-    policy_id = list(policy_id_to_x_values.keys())[point_index]  # Retrieve policy ID based on point index
-    if policy_id in policy_id_to_x_values:
-      new_x_value = policy_id_to_x_values[policy_id][xaxis_choice]  # Get new x value based on xaxis choice
-
-      # Create the selected point with the new x value
-      selected_point = go.Scatter(
-        x=[new_x_value],
-        y=[clickData['points'][0]['y']],
-        mode='markers',
-        marker=dict(color='red', size=15),
-        name='Selected Point'
-      )
-
-  conn.close()
-
-  # Create plots for average FEs and standard deviation
   data = [
     go.Scatter(x=num_episodes, y=avg_function_evaluations, mode='lines+markers', name='#FEs until optimum', line=dict(color='blue', width=4)),
     go.Scatter(x=num_episodes, y=[avg + std for avg, std in zip(avg_function_evaluations, std_dev_evaluations)], mode='lines', line=dict(color='rgba(173,216,230,0.2)'), name='Upper Bound (Mean + Std. Dev.)'),
     go.Scatter(x=num_episodes, y=[avg - std for avg, std in zip(avg_function_evaluations, std_dev_evaluations)], mode='lines', fill='tonexty', line=dict(color='rgba(173,216,230,0.2)'), name='Lower Bound (Mean - Std. Dev.)'),
-    go.Scatter(x=[min(num_episodes), max(num_episodes)] if num_episodes else [0], y=[baseline_avg_length, baseline_avg_length], mode='lines', name='Theory: √(𝑛/(𝑛 − 𝑓(𝑥)))', line=dict(color='orange', width=2, dash='dash'))
+    go.Scatter(x=[min(num_episodes), max(num_episodes)] if num_episodes else [0], y=[baseline_avg_length, baseline_avg_length], mode='lines', name='Theory: √(𝑛/(𝑛 − 𝑓(𝑥)))', line=dict(color='orange', width=2, dash='dash')),
+    go.Scatter(x=num_episodes, y=baseline_upper_bound, mode='lines', line=dict(color='rgba(255, 165, 0, 0.2)'), name='Upper Bound (Baseline Variance)'),
+    go.Scatter(x=num_episodes, y=baseline_lower_bound, mode='lines', fill='tonexty', line=dict(color='rgba(255, 165, 0, 0.2)'), name='Lower Bound (Baseline Variance)'),
   ]
 
+  conn.close()
+  return data
 
-  # Add the shadowed variance for the baseline to the plot
-  data.extend([
-      go.Scatter(
-        x=num_episodes,
-        y=baseline_upper_bound,
-        mode='lines',
-        line=dict(color='rgba(255, 165, 0, 0.2)'),
-        name='Upper Bound (Baseline Variance)',
-      ),
-      go.Scatter(
-        x=num_episodes,
-        y=baseline_lower_bound,
-        mode='lines',
-        fill='tonexty',
-        line=dict(color='rgba(255, 165, 0, 0.2)'),
-        name='Lower Bound (Baseline Variance)',
-      )
-  ])
+def policy_performance(db_path, xaxis_choice):
+  data = load_policy_performance_data(db_path, xaxis_choice)
+  # Define the layout with larger dimensions and enhanced appearance
+  layout = go.Layout(
+    titlefont=dict(size=24),  # Bigger title font size
+    xaxis=dict(
+      title=xaxis_choice.replace('_', ' ').title(),
+      titlefont=dict(size=18),  # Bigger axis title font size
+      tickfont=dict(size=14),  # Bigger tick labels font size
+      gridcolor='lightgrey',  # Grid color
+      gridwidth=2,  # Grid line width
+    ),
+    yaxis=dict(
+      title='#FEs until optimum',
+      titlefont=dict(size=18),  # Bigger axis title font size
+      tickfont=dict(size=14),  # Bigger tick labels font size
+      gridcolor='lightgrey',  # Grid color
+      gridwidth=2,  # Grid line width
+    ),
+    font=dict(family='Courier New, monospace', size=18, color='RebeccaPurple'),
+    paper_bgcolor='rgba(0,0,0,0)',
+    plot_bgcolor='rgba(245, 245, 245, 1)',
+    width=1100,  # Width of the figure
+    height=600,  # Height of the figure
+    margin=dict(l=50, r=50, b=100, t=100, pad=4),  # Margins to prevent cutoff
+    showlegend=False,  # This will remove the legend
+  )
 
-  if selected_point:
-    data.append(selected_point)
+  fig = go.Figure(data=data, layout=layout)
+  fig.show()
 
-  return {
-    'data': data,
-    'layout': go.Layout(
-      title='Policy Performance Plot',
-      xaxis=dict(
-        title=xaxis_choice.replace('_', ' ').title(),
-        gridcolor=stylish_layout['gridcolor'],
-        gridwidth=stylish_layout['gridwidth'],
-        tickformat=',',
-      ),
-      yaxis=dict(
-        title='#FEs until optimum',
-        gridcolor=stylish_layout['gridcolor'],
-        gridwidth=stylish_layout['gridwidth'],
-        tickformat=',',
-      ),
-      font=stylish_layout['font'],
-      paper_bgcolor=stylish_layout['paper_bgcolor'],
-      plot_bgcolor=stylish_layout['plot_bgcolor'],
-    )
-  }
+def get_policy_id_for_timesteps(db_path, total_timesteps):
+  try:
+    with sqlite3.connect(db_path) as conn:
+      cursor = conn.cursor()
+      # SQL query to fetch policy_id based on the total timesteps
+      cursor.execute('SELECT policy_id FROM CONSTRUCTED_POLICIES WHERE num_total_timesteps = ?', (total_timesteps,))
+      result = cursor.fetchone()
+      return result[0] if result else None
+  except sqlite3.Error as e:
+    print(f"SQLite error: {e}")
+    return None
 
+def generate_fitness_lambda_plot(db_path, policy_total_timesteps):
 
-@app.callback(
-  Output('fitness-lambda-plot', 'figure'),
-  [Input('policy-performance-plot', 'clickData'),
-   Input('xaxis-selector', 'value')]
-)
-def update_fitness_lambda_plot(clickData, xaxis_choice):
-  global policy_id_to_x_values
+  policy_id = get_policy_id_for_timesteps(db_path, policy_total_timesteps)
 
-  db_path = load_db_path()
   conn = sqlite3.connect(db_path)
   cursor = conn.cursor()
 
@@ -440,115 +206,126 @@ def update_fitness_lambda_plot(clickData, xaxis_choice):
   cursor.execute('SELECT fitness, lambda_minus_one FROM POLICY_DETAILS WHERE policy_id = -1')
   baseline_fitness_lambda_data = cursor.fetchall()
 
-  baseline_curve = plotly.graph_objs.Scatter(
-      x=[d[0] for d in baseline_fitness_lambda_data],
-      y=[d[1] + 1 for d in baseline_fitness_lambda_data],
-      mode='lines+markers',
-      name='Baseline Fitness-Lambda',
-      line=dict(color='orange', width=4)
+  baseline_curve = go.Scatter(
+    x=[d[0] for d in baseline_fitness_lambda_data],
+    y=[d[1] + 1 for d in baseline_fitness_lambda_data],
+    mode='lines+markers',
+    name='Baseline Fitness-Lambda',
+    line=dict(color='orange', width=4)
   )
 
-  # Data for the selected policy
-  selected_policy_curve = {'data': [], 'layout': {}}
-  if clickData and did_we_click_the_mean_policy_curve(clickData):
-    point_index = clickData['points'][0]['pointIndex']
-    policy_id = list(policy_id_to_x_values.keys())[point_index]
-    if policy_id in policy_id_to_x_values:
+  # Fetch mean and variance of initial fitness for the specified policy
+  cursor.execute('SELECT mean_initial_fitness, variance_initial_fitness FROM CONSTRUCTED_POLICIES WHERE policy_id = ?', (policy_id,))
+  fitness_stats = cursor.fetchone()
+  mean_initial_fitness = std_dev_initial_fitness = None
+  if fitness_stats and fitness_stats[0]:
+    mean_initial_fitness = fitness_stats[0]
+    variance_initial_fitness = fitness_stats[1]
+    std_dev_initial_fitness = math.sqrt(variance_initial_fitness)
 
-      # Fetch mean and variance of initial fitness for the selected policy
-      cursor.execute('SELECT mean_initial_fitness, variance_initial_fitness FROM CONSTRUCTED_POLICIES WHERE policy_id = ?', (policy_id,))
-      fitness_stats = cursor.fetchone()
-      if fitness_stats[0]:
-        mean_initial_fitness = fitness_stats[0]
-        variance_initial_fitness = fitness_stats[1]
-        std_dev_initial_fitness = math.sqrt(variance_initial_fitness)
+  # Fetch fitness-lambda data for the specified policy
+  cursor.execute('SELECT fitness, lambda_minus_one FROM POLICY_DETAILS WHERE policy_id = ?', (policy_id,))
+  fitness_lambda_data = cursor.fetchall()
 
-      # Fetch fitness-lambda data for the selected policy
-      cursor.execute('SELECT fitness, lambda_minus_one FROM POLICY_DETAILS WHERE policy_id = ?', (policy_id,))
-      fitness_lambda_data = cursor.fetchall()
+  selected_policy_curve = go.Scatter(
+    x=[d[0] for d in fitness_lambda_data],
+    y=[d[1] + 1 for d in fitness_lambda_data],
+    mode='lines+markers',
+    name=f'Fitness-Lambda Policy {policy_id}',
+    line=dict(color='blue', width=4)
+  )
 
-      selected_policy_curve = {
-        'data': [plotly.graph_objs.Scatter(
-          x=[d[0] for d in fitness_lambda_data],
-          y=[d[1] + 1 for d in fitness_lambda_data],
-          mode='lines+markers',
-          name=f'Fitness-Lambda Policy {policy_id}',
-          line=dict(color='blue', width=4)
-        )],
-        'layout': plotly.graph_objs.Layout(
-          title=f'Fitness-Lambda Assignment for Policy {policy_id}',
-          xaxis=dict(title='Fitness', gridcolor=stylish_layout['gridcolor'], gridwidth=stylish_layout['gridwidth']),
-          yaxis=dict(title='Lambda', gridcolor=stylish_layout['gridcolor'], gridwidth=stylish_layout['gridwidth']),
-          font=stylish_layout['font'],
-          paper_bgcolor=stylish_layout['paper_bgcolor'],
-          plot_bgcolor=stylish_layout['plot_bgcolor']
-        )
-      }
+  data = [baseline_curve, selected_policy_curve]
 
-      if fitness_stats[0]:
-        # Add shaded area for variance
-        # Upper bound line (mean + std_dev)
-        selected_policy_curve['data'].append(
-          go.Scatter(
-            x=[mean_initial_fitness + std_dev_initial_fitness] * 2,
-            y=[0, max([d[1] + 1 for d in fitness_lambda_data])],  # Adjust Y-axis limits
-            mode='lines',
-            line=dict(width=0),
-            showlegend=False
-          )
-        )
+  # Adding shaded area for variance if available
+  if mean_initial_fitness is not None:
+    upper_bound = go.Scatter(
+      x=[mean_initial_fitness + std_dev_initial_fitness] * 2,
+      y=[0, max([d[1] + 1 for d in fitness_lambda_data])],
+      mode='lines',
+      line=dict(width=0),
+      showlegend=False
+    )
+    lower_bound = go.Scatter(
+      x=[mean_initial_fitness - std_dev_initial_fitness] * 2,
+      y=[0, max([d[1] + 1 for d in fitness_lambda_data])],
+      mode='lines',
+      fill='tonexty',
+      fillcolor='rgba(0, 255, 0, 0.2)',
+      line=dict(width=0),
+      name='Variance Initial Fitness'
+    )
+    mean_line = go.Scatter(
+      x=[mean_initial_fitness, mean_initial_fitness],
+      y=[0, max([d[1] + 1 for d in fitness_lambda_data])],
+      mode='lines',
+      name=f'Mean Initial Fitness',
+      line=dict(color='green', width=2, dash='dot')
+    )
+    data.extend([upper_bound, lower_bound, mean_line])
 
-        # Lower bound line (mean - std_dev)
-        selected_policy_curve['data'].append(
-          go.Scatter(
-            x=[mean_initial_fitness - std_dev_initial_fitness] * 2,
-            y=[0, max([d[1] + 1 for d in fitness_lambda_data])],  # Adjust Y-axis limits
-            mode='lines',
-            fill='tonexty',
-            fillcolor='rgba(0, 255, 0, 0.2)',  # Semi-transparent green for the variance
-            line=dict(width=0),
-            name='Variance Initial Fitness'
-          )
-        )
-
-        # Vertical line for the mean
-        selected_policy_curve['data'].append(
-          go.Scatter(
-            x=[mean_initial_fitness, mean_initial_fitness],
-            y=[0, max([d[1] + 1 for d in fitness_lambda_data])],  # Adjust Y-axis limits
-            mode='lines',
-            name=f'Mean Initial Fitness',
-            line=dict(color='green', width=2, dash='dot')
-          )
-        )
-
-
-
+  layout = go.Layout(
+    title=f'Fitness-Lambda Assignment for Policy {policy_id}',
+    xaxis=dict(title='Fitness'),
+    yaxis=dict(title='Lambda'),
+    font=dict(family='Courier New, monospace', size=18, color='RebeccaPurple'),
+    paper_bgcolor='rgba(0,0,0,0)',
+    plot_bgcolor='rgba(245, 245, 245, 1)'
+  )
 
   conn.close()
+  fig = go.Figure(data=data, layout=layout)
+  fig.show()
 
-  # Combine data from selected policy and baseline
-  all_data = [baseline_curve] + selected_policy_curve['data']
+def print_matching(db_folder_path, filter_expression):
+  configs = load_configs_from_folder(db_folder_path)
+  matching_db_paths = filter_configs(configs, filter_expression)
+  for path in matching_db_paths:
+    print(path)
 
-  # Use layout from selected policy curve if it exists, else use default
-  layout = selected_policy_curve['layout'] if selected_policy_curve['data'] else {
-      'title': 'Fitness-Lambda Assignment',
-      'xaxis': {'title': 'Fitness'},
-      'yaxis': {'title': 'Lambda'},
-      'font': stylish_layout['font'],
-      'paper_bgcolor': stylish_layout['paper_bgcolor'],
-      'plot_bgcolor': stylish_layout['plot_bgcolor']
-  }
+# ====================================================================================================================
 
-  return {'data': all_data, 'layout': layout}
+db_folder_path = '../computed/cirrus/'
+filter_expression = {
+  "max_training_timesteps": "{} == {}",
+  "ppo": {
+  "n_steps": "{} == {}",
+  "policy": "{} == {}",
+  "batch_size": "{} == 100",
+  "gamma": "{} == {}",
+  "gae_lambda": "{} <= 0.98",
+  "vf_coef": "{} == {}",
+  "net_arch": [
+    "{} == {}",
+    "{} == {}",
+  ],
+  "learning_rate": "{} == {}",
+  "clip_range": "{} == {}",
+  "n_epochs": "{} == {}",
+  "ent_coef": "{} == {}",
+  },
+  "n": "{} >= 40",
+  "num_timesteps_per_evaluation": "{} == {}",
+  "reward_type": "{} == {}",
+  "num_evaluation_episodes": "{} == {}",
+  "action_type": "{} == {}",
+  "num_lambdas": "{} == {}",
+  "random_seed": "{} == {}",
+  "probability_of_closeness_to_optimum": "{} == {}",
+  "state_type": "{} == {}"
+}
 
-def is_port_open(port):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        return s.connect_ex(('localhost', port)) != 0
+print_matching(db_folder_path, filter_expression)
 
-if __name__ == '__main__':
-  parser = argparse.ArgumentParser(description='Run Flask app on a specified port.')
-  parser.add_argument('--port', type=int, default=8050, help='Port number (default: 8050)')
-  args = parser.parse_args()
+# ====================================================================================================================
 
-  app.run(debug=True, port=args.port)
+db_path = "../computed/cirrus/underhand.db"
+xaxis_choice = "num_total_timesteps"
+policy_performance(db_path, xaxis_choice)
+
+# ====================================================================================================================
+
+policy_total_timesteps = 120_000
+generate_fitness_lambda_plot(db_path, policy_total_timesteps)
+
+# ====================================================================================================================

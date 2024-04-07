@@ -1,6 +1,43 @@
 
 
 ```sh
+
+
+
+
+sbatch .deploy/RUN_GENERATE config/compare_cont_disc/batch.yaml
+sbatch .deploy/RUN_GENERATE config/compare_cont_disc/climatic.yaml
+sbatch .deploy/RUN_GENERATE config/compare_cont_disc/colony.yaml
+sbatch .deploy/RUN_GENERATE config/compare_cont_disc/dealmaker.yaml
+sbatch .deploy/RUN_GENERATE config/compare_cont_disc/emoticon.yaml
+sbatch .deploy/RUN_GENERATE config/compare_cont_disc/fanciness.yaml
+sbatch .deploy/RUN_GENERATE config/compare_cont_disc/rubdown.yaml
+sbatch .deploy/RUN_GENERATE config/compare_cont_disc/wasabi.yaml
+
+sbatch .deploy/RUN_GENERATE config/ppo/anytime.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/area.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/disorder.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/garage.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/giggly.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/glacial.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/glorified.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/handshake.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/ladle.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/pediatric.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/pep.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/primp.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/propeller.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/protector.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/quality.yaml
+sbatch .deploy/RUN_GENERATE config/ppo/underhand.yaml
+
+
+
+
+
+
+
+
 sbatch .deploy/RUN_GENERATE config/ppo/anthology.yaml
 sbatch .deploy/RUN_GENERATE config/ppo/chance.yaml
 sbatch .deploy/RUN_GENERATE config/ppo/drank.yaml
@@ -17,6 +54,18 @@ sbatch .deploy/RUN_GENERATE config/ppo/preschool.yaml
 sbatch .deploy/RUN_GENERATE config/ppo/racing.yaml
 sbatch .deploy/RUN_GENERATE config/ppo/sublease.yaml
 sbatch .deploy/RUN_GENERATE config/ppo/timothy.yaml
+
+
+
+OO__DB_PATH=computed/data/shadily.db python src/visualize.py --port 9000
+OO__DB_PATH=computed/cirrus/compare_cont_disc/batch.db python src/visualize.py --port 9000
+OO__DB_PATH=computed/cirrus/compare_cont_disc/climatic.db python src/visualize.py --port 9001
+OO__DB_PATH=computed/cirrus/compare_cont_disc/colony.db python src/visualize.py --port 9002
+OO__DB_PATH=computed/cirrus/compare_cont_disc/dealmaker.db python src/visualize.py --port 9003
+OO__DB_PATH=computed/cirrus/compare_cont_disc/emoticon.db python src/visualize.py --port 9004
+OO__DB_PATH=computed/cirrus/compare_cont_disc/fanciness.db python src/visualize.py --port 9005
+OO__DB_PATH=computed/cirrus/compare_cont_disc/rubdown.db python src/visualize.py --port 9006
+OO__DB_PATH=computed/cirrus/compare_cont_disc/wasabi.db python src/visualize.py --port 9007
 
 
 
