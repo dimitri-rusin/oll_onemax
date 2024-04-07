@@ -1,5 +1,17 @@
 
 
+
+
+
+Convert .py to .ipynb:
+```sh
+
+cd /home/dimitri/code/py2ipynb
+conda activate .deploy/conda_environment/
+python src/py2ipynb.py /home/dimitri/code/oll_onemax/src/visualize.py /home/dimitri/code/oll_onemax/src/visualize.ipynb
+
+```
+
 ```sh
 
 

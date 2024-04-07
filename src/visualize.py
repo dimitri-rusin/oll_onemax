@@ -2,7 +2,11 @@ import ast
 import inspectify
 import math
 import os
+import pandas as pd
+import plotly.graph_objects as go
 import plotly.graph_objs as go
+import sqlite3
+import sqlite3
 import sqlite3
 
 def load_config_data(db_path):
@@ -127,7 +131,7 @@ def load_policy_performance_data(db_path, xaxis_choice):
     avg_function_evaluations.append(avg_evaluations if avg_evaluations is not None else 0)
     std_dev_evaluations.append(std_dev)
 
-  policy_ids, num_episodes = zip(*training_data) if training_data else ([], [])
+  policy_ids, num_training_timesteps_or_num_training_fes = zip(*training_data) if training_data else ([], [])
 
   cursor.execute('SELECT AVG(num_function_evaluations) FROM EVALUATION_EPISODES WHERE policy_id = -1')
   baseline_avg_length = 0
@@ -137,16 +141,16 @@ def load_policy_performance_data(db_path, xaxis_choice):
   baseline_variance = sum((e - baseline_avg_length) ** 2 for e in baseline_evaluations) / (len(baseline_evaluations) - 1) if len(baseline_evaluations) > 1 else 0
   baseline_std_dev = math.sqrt(baseline_variance)
 
-  baseline_upper_bound = [baseline_avg_length + baseline_std_dev] * len(num_episodes)
-  baseline_lower_bound = [baseline_avg_length - baseline_std_dev] * len(num_episodes)
+  baseline_upper_bound = [baseline_avg_length + baseline_std_dev] * len(num_training_timesteps_or_num_training_fes)
+  baseline_lower_bound = [baseline_avg_length - baseline_std_dev] * len(num_training_timesteps_or_num_training_fes)
 
   data = [
-    go.Scatter(x=num_episodes, y=avg_function_evaluations, mode='lines+markers', name='#FEs until optimum', line=dict(color='blue', width=4)),
-    go.Scatter(x=num_episodes, y=[avg + std for avg, std in zip(avg_function_evaluations, std_dev_evaluations)], mode='lines', line=dict(color='rgba(173,216,230,0.2)'), name='Upper Bound (Mean + Std. Dev.)'),
-    go.Scatter(x=num_episodes, y=[avg - std for avg, std in zip(avg_function_evaluations, std_dev_evaluations)], mode='lines', fill='tonexty', line=dict(color='rgba(173,216,230,0.2)'), name='Lower Bound (Mean - Std. Dev.)'),
-    go.Scatter(x=[min(num_episodes), max(num_episodes)] if num_episodes else [0], y=[baseline_avg_length, baseline_avg_length], mode='lines', name='Theory: √(𝑛/(𝑛 − 𝑓(𝑥)))', line=dict(color='orange', width=2, dash='dash')),
-    go.Scatter(x=num_episodes, y=baseline_upper_bound, mode='lines', line=dict(color='rgba(255, 165, 0, 0.2)'), name='Upper Bound (Baseline Variance)'),
-    go.Scatter(x=num_episodes, y=baseline_lower_bound, mode='lines', fill='tonexty', line=dict(color='rgba(255, 165, 0, 0.2)'), name='Lower Bound (Baseline Variance)'),
+    go.Scatter(x=num_training_timesteps_or_num_training_fes, y=avg_function_evaluations, mode='lines+markers', name='#FEs until optimum', line=dict(color='blue', width=4)),
+    go.Scatter(x=num_training_timesteps_or_num_training_fes, y=[avg + std for avg, std in zip(avg_function_evaluations, std_dev_evaluations)], mode='lines', line=dict(color='rgba(173,216,230,0.2)'), name='Upper Bound (Mean + Std. Dev.)'),
+    go.Scatter(x=num_training_timesteps_or_num_training_fes, y=[avg - std for avg, std in zip(avg_function_evaluations, std_dev_evaluations)], mode='lines', fill='tonexty', line=dict(color='rgba(173,216,230,0.2)'), name='Lower Bound (Mean - Std. Dev.)'),
+    go.Scatter(x=[min(num_training_timesteps_or_num_training_fes), max(num_training_timesteps_or_num_training_fes)] if num_training_timesteps_or_num_training_fes else [0], y=[baseline_avg_length, baseline_avg_length], mode='lines', name='Theory: √(𝑛/(𝑛 − 𝑓(𝑥)))', line=dict(color='orange', width=2, dash='dash')),
+    go.Scatter(x=num_training_timesteps_or_num_training_fes, y=baseline_upper_bound, mode='lines', line=dict(color='rgba(255, 165, 0, 0.2)'), name='Upper Bound (Baseline Variance)'),
+    go.Scatter(x=num_training_timesteps_or_num_training_fes, y=baseline_lower_bound, mode='lines', fill='tonexty', line=dict(color='rgba(255, 165, 0, 0.2)'), name='Lower Bound (Baseline Variance)'),
   ]
 
   conn.close()
@@ -197,8 +201,6 @@ def get_policy_id_for_timesteps(db_path, total_timesteps):
 
 def generate_fitness_lambda_plot(db_path, policy_total_timesteps):
 
-  policy_id = get_policy_id_for_timesteps(db_path, policy_total_timesteps)
-
   conn = sqlite3.connect(db_path)
   cursor = conn.cursor()
 
@@ -213,6 +215,8 @@ def generate_fitness_lambda_plot(db_path, policy_total_timesteps):
     name='Baseline Fitness-Lambda',
     line=dict(color='orange', width=4)
   )
+
+  policy_id = get_policy_id_for_timesteps(db_path, policy_total_timesteps)
 
   # Fetch mean and variance of initial fitness for the specified policy
   cursor.execute('SELECT mean_initial_fitness, variance_initial_fitness FROM CONSTRUCTED_POLICIES WHERE policy_id = ?', (policy_id,))
@@ -273,6 +277,25 @@ def generate_fitness_lambda_plot(db_path, policy_total_timesteps):
     plot_bgcolor='rgba(245, 245, 245, 1)'
   )
 
+
+
+  # ================= Print scalar info about specified policy: ====================================
+  cursor.execute(f'SELECT policy_id, {xaxis_choice} FROM CONSTRUCTED_POLICIES WHERE policy_id = ?', (policy_id,))
+  training_data = cursor.fetchone()
+  assert len(training_data) > 0, f"Policy ID {policy_id} missing!"
+  _, num_training_timesteps_or_num_training_fes = training_data
+  cursor.execute('SELECT num_function_evaluations FROM EVALUATION_EPISODES WHERE policy_id = ?', (policy_id,))
+  evaluations = [e[0] for e in cursor.fetchall()]
+  avg_evaluations = sum(evaluations) / len(evaluations) if evaluations else None
+  std_dev = math.sqrt(sum((e - avg_evaluations) ** 2 for e in evaluations) / len(evaluations)) if evaluations else 0
+
+  print("Policy ID:", policy_id)
+  print("Y axis:", "{:,}".format(num_training_timesteps_or_num_training_fes))
+  print("Num FEs (Mean):", avg_evaluations)
+  print("Num FEs (Mean - Stddev):", avg_evaluations - std_dev)
+  print("Num FEs (Mean + Stddev):", avg_evaluations + std_dev)
+  # ================= PRINT END ====================================
+
   conn.close()
   fig = go.Figure(data=data, layout=layout)
   fig.show()
@@ -283,26 +306,81 @@ def print_matching(db_folder_path, filter_expression):
   for path in matching_db_paths:
     print(path)
 
+def display_config_as_dataframe(db_path):
+  try:
+    with sqlite3.connect(db_path) as conn:
+      df = pd.read_sql_query("SELECT key, value FROM CONFIG", conn)
+  except sqlite3.Error as e:
+    print(f"SQLite error: {e}")
+    return None
+
+  def format_value(value):
+    """Format numerical values with commas."""
+    try:
+      if isinstance(value, (int, float)):
+        return "{:,}".format(value)
+      if isinstance(value, str):
+        if value.isdigit():
+          return "{:,}".format(int(value))
+        # Attempt to convert to float for strings like '123.45'
+        try:
+          return "{:,}".format(float(value))
+        except ValueError:
+          pass
+    except (ValueError, TypeError):
+      pass
+    return value
+
+  def unfold_dict(prefix, d, rows):
+    """Recursive function to unfold nested dictionaries."""
+    for key, value in d.items():
+      new_key = f"{prefix}__{key}" if prefix else key
+      if isinstance(value, dict):
+        unfold_dict(new_key, value, rows)
+      else:
+        formatted_value = format_value(value)
+        rows.append({'key': new_key, 'value': formatted_value})
+
+  # Process each row and unfold nested dictionaries
+  new_rows = []
+  for _, row in df.iterrows():
+    try:
+      value = ast.literal_eval(row['value'])
+      if isinstance(value, dict):
+        unfold_dict(row['key'], value, new_rows)
+      else:
+        formatted_value = format_value(value)
+        new_rows.append({'key': row['key'], 'value': formatted_value})
+    except (ValueError, SyntaxError):
+      # Format value if it's a number, keep as is otherwise
+      formatted_value = format_value(row['value'])
+      new_rows.append({'key': row['key'], 'value': formatted_value})
+
+  # Create a new DataFrame from the processed rows and set 'key' as the index
+  new_df = pd.DataFrame(new_rows).set_index('key')
+
+  return new_df
+
 # ====================================================================================================================
 
 db_folder_path = '../computed/cirrus/'
 filter_expression = {
   "max_training_timesteps": "{} == {}",
   "ppo": {
-  "n_steps": "{} == {}",
-  "policy": "{} == {}",
-  "batch_size": "{} == 100",
-  "gamma": "{} == {}",
-  "gae_lambda": "{} <= 0.98",
-  "vf_coef": "{} == {}",
-  "net_arch": [
-    "{} == {}",
-    "{} == {}",
-  ],
-  "learning_rate": "{} == {}",
-  "clip_range": "{} == {}",
-  "n_epochs": "{} == {}",
-  "ent_coef": "{} == {}",
+    "n_steps": "{} == {}",
+    "policy": "{} == {}",
+    "batch_size": "{} == 100",
+    "gamma": "{} == {}",
+    "gae_lambda": "{} <= 0.98",
+    "vf_coef": "{} == {}",
+    "net_arch": [
+      "{} == {}",
+      "{} == {}",
+    ],
+    "learning_rate": "{} == {}",
+    "clip_range": "{} == {}",
+    "n_epochs": "{} == {}",
+    "ent_coef": "{} == {}",
   },
   "n": "{} >= 40",
   "num_timesteps_per_evaluation": "{} == {}",
@@ -312,7 +390,7 @@ filter_expression = {
   "num_lambdas": "{} == {}",
   "random_seed": "{} == {}",
   "probability_of_closeness_to_optimum": "{} == {}",
-  "state_type": "{} == {}"
+  "state_type": "{} == {}",
 }
 
 print_matching(db_folder_path, filter_expression)
@@ -320,6 +398,10 @@ print_matching(db_folder_path, filter_expression)
 # ====================================================================================================================
 
 db_path = "../computed/cirrus/underhand.db"
+display_config_as_dataframe(db_path)
+
+# ====================================================================================================================
+
 xaxis_choice = "num_total_timesteps"
 policy_performance(db_path, xaxis_choice)
 
@@ -327,5 +409,3 @@ policy_performance(db_path, xaxis_choice)
 
 policy_total_timesteps = 120_000
 generate_fitness_lambda_plot(db_path, policy_total_timesteps)
-
-# ====================================================================================================================
