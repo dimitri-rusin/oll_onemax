@@ -3,6 +3,34 @@
 
 
 
+
+```sh
+
+
+
+
+
+mkdir -p /home/dimitri/code/oll_onemax/computed/cirrus-login2/continuous
+rsync -avz --progress cirrus:/work/sc122/sc122/dimitri_rusin/oll_onemax/computed/cirrus-login2/continuous/ /home/dimitri/code/oll_onemax/computed/cirrus-login2/continuous
+
+
+
+
+sacct --job=5598911
+squeue -u $USER | grep 5598911
+
+
+```
+
+
+```sh
+# This will run first config via bash.
+find config/continuous/ -name '*.yaml' -print0 | xargs -0 -I {} bash .deploy/RUN_GENERATE {}
+
+# This will run all configs via sbatch.
+find config/continuous/ -name '*.yaml' -print0 | xargs -0 -I {} sbatch .deploy/RUN_GENERATE {}
+```
+
 Convert .py to .ipynb:
 ```sh
 
@@ -262,7 +290,6 @@ sbatch .deploy/generate.slurm config/ppo.yaml
 
 ```sh
 rsync -avz --progress cirrus:/work/sc122/sc122/dimitri_rusin/oll_onemax/computed/data/ /home/dimitri/code/oll_onemax/computed/cirrus
-
 
 
 

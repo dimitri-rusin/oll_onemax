@@ -378,7 +378,7 @@ def display_config_as_dataframe(db_path):
 
 # ====================================================================================================================
 
-db_folder_path = '../computed/cirrus/'
+db_folder_path = "../computed/cirrus-login2/continuous/"
 filter_expression = {
   "max_training_timesteps": "{} == {}",
   "ppo": {
@@ -412,17 +412,21 @@ print_matching(db_folder_path, filter_expression)
 
 # ====================================================================================================================
 
-db_path = "../computed/data/shadily.db"
+db_path = "../computed/cirrus-login2/continuous/brunch.db"
 display_config_as_dataframe(db_path)
 
 # ====================================================================================================================
 
+db_path = "../computed/cirrus-login2/continuous/brunch.db"
 xaxis_choice = "num_total_timesteps"
 yaxis_choice = "num_function_evaluations"
-yaxis_choice = "episode_length"
+# yaxis_choice = "episode_length"
 policy_performance(db_path, xaxis_choice, yaxis_choice)
 
 # ====================================================================================================================
 
-policy_total_timesteps = 2
+db_path = "../computed/cirrus-login2/continuous/brunch.db"
+policy_total_timesteps = 40_000
+xaxis_choice = "num_total_timesteps"
+yaxis_choice = "num_function_evaluations"
 generate_fitness_lambda_plot(db_path, policy_total_timesteps, xaxis_choice, yaxis_choice)
