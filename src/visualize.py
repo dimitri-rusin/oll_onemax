@@ -319,6 +319,9 @@ def print_matching(db_folder_path, filter_expression):
     print(path)
 
 def display_config_as_dataframe(db_path):
+
+  assert os.path.exists(db_path), f"There is no database at {db_path}!"
+
   try:
     with sqlite3.connect(db_path) as conn:
       df = pd.read_sql_query("SELECT key, value FROM CONFIG", conn)

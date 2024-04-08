@@ -18,6 +18,6 @@
     policy: [MlpPolicy]
     vf_coef: [0.5]
   probability_of_closeness_to_optimum: [0.95]
-  random_seed: [42, 83]
+  random_seed: [42, 83, 2]
   reward_type: [ONLY_EVALUATIONS, EVALUATIONS_PLUS_FITNESS]
   state_type: [SCALAR_ENCODED, ONE_HOT_ENCODED]

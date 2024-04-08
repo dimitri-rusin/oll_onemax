@@ -93,7 +93,7 @@ def write_config_to_yaml(configs, wordlist, num_words):
     path_parts = os.path.split(config_path)
     directory_path = path_parts[0]
     os.makedirs(directory_path, exist_ok=True)
-    assert not os.path.exists(config_path), f"Configuration {config_path} already exists. Please delete first."
+    assert not os.path.exists(config_path), f"Configuration {config_path} already exists. Please run:\nrm -rf {directory_path}"
     with open(config_path, 'w') as file:
       file.write(yaml_content)
 
