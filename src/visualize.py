@@ -315,6 +315,9 @@ def generate_fitness_lambda_plot(db_path, policy_total_timesteps, xaxis_choice, 
 def print_matching(db_folder_path, filter_expression):
   configs = load_configs_from_folder(db_folder_path)
   matching_db_paths = filter_configs(configs, filter_expression)
+  if not matching_db_paths:
+    print("NO MATCH!")
+    return
   for path in matching_db_paths:
     print(path)
 
@@ -384,9 +387,9 @@ filter_expression = {
   "ppo": {
     "n_steps": "{} == {}",
     "policy": "{} == {}",
-    "batch_size": "{} == 100",
+    "batch_size": "{} == {}",
     "gamma": "{} == {}",
-    "gae_lambda": "{} <= 0.98",
+    "gae_lambda": "{} == {}",
     "vf_coef": "{} == {}",
     "net_arch": [
       "{} == {}",
@@ -397,15 +400,15 @@ filter_expression = {
     "n_epochs": "{} == {}",
     "ent_coef": "{} == {}",
   },
-  "n": "{} >= 40",
+  "n": "{} == {}",
   "num_timesteps_per_evaluation": "{} == {}",
-  "reward_type": "{} == {}",
+  "reward_type": "{} == 'EVALUATIONS_PLUS_FITNESS'",
   "num_evaluation_episodes": "{} == {}",
-  "action_type": "{} == {}",
+  "action_type": "{} == 'DISCRETE'",
   "num_lambdas": "{} == {}",
-  "random_seed": "{} == {}",
+  "random_seed": "{} == 42",
   "probability_of_closeness_to_optimum": "{} == {}",
-  "state_type": "{} == {}",
+  "state_type": "{} == 'ONE_HOT_ENCODED'",
 }
 
 print_matching(db_folder_path, filter_expression)
