@@ -1,4 +1,4 @@
-- action_space_type: [DISCRETE, CONTINUOUS]
+- action_type: [DISCRETE, CONTINUOUS]
   db_path: ["computed/{hostname}/continuous/{wordhash}.db"]
   max_training_timesteps: [500_000]
   n: [80]
@@ -20,4 +20,4 @@
   probability_of_closeness_to_optimum: [0.95]
   random_seed: [42, 83]
   reward_type: [ONLY_EVALUATIONS, EVALUATIONS_PLUS_FITNESS]
-  state_space_type: [SCALAR_ENCODED, ONE_HOT_ENCODED]
+  state_type: [SCALAR_ENCODED, ONE_HOT_ENCODED]

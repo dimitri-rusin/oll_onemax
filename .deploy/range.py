@@ -82,11 +82,12 @@ def write_config_to_yaml(configs, wordlist, num_words):
   for (single_config, _), pruned_filename in zip(all_filenames, pruned_filenames):
     hostname = socket.gethostname()
     single_config["db_path"] = single_config["db_path"].replace("{wordhash}", pruned_filename)
+    config_path = single_config["db_path"]
     single_config["db_path"] = single_config["db_path"].replace("{hostname}", hostname)
     yaml_content = yaml.dump(single_config, default_flow_style=None)
 
 
-    config_path = single_config["db_path"]
+    config_path = config_path.replace("{hostname}/", "")
     config_path = config_path.replace("computed", "config")
     config_path = config_path.replace(".db", ".yaml")
     path_parts = os.path.split(config_path)
