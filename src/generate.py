@@ -1,9 +1,5 @@
 from datetime import datetime
-import ray
-from ray.rllib.utils import check_env
-from ray.rllib.algorithms.ppo import PPOConfig
-from ray.tune.logger import pretty_print
-from ray.rllib.policy.policy import Policy
+from stable_baselines3 import PPO
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.env_util import make_vec_env
@@ -51,8 +47,7 @@ class OneMaxOLL(gymnasium.Env):
       self.action_space = gymnasium.spaces.Box(low=0, high=num_actions - 1, shape=(1,), dtype=numpy.float64)
 
     if state_type == 'SCALAR_ENCODED':
-      self.observation_space = gymnasium.spaces.Box(low=0, high=n, shape=(1,), dtype=numpy.int32)
-      # high=n rather high=(n - 1), because the terminal observations are evaluated by RLlib
+      self.observation_space = gymnasium.spaces.Box(low=0, high=n - 1, shape=(1,), dtype=numpy.int32)
     if state_type == 'ONE_HOT_ENCODED':
       self.observation_space = gymnasium.spaces.Box(low=0, high=1, shape=(n,), dtype=numpy.int32)
     self.state_type = state_type
@@ -83,7 +78,8 @@ class OneMaxOLL(gymnasium.Env):
       )
       initial_fitness = self.current_solution.fitness
 
-    self.num_function_evaluations += 1 # there is one evaluation [call to .eval()] inside OneMax
+    # there is one evaluation [call to .eval()] inside OneMax
+    self.num_function_evaluations += 1
 
     fitness_array = None
     if self.state_type == 'SCALAR_ENCODED':
@@ -321,52 +317,9 @@ def load_config():
         d = d[part]
       d[key_parts[-1]] = parsed_value
 
-
-
-
-def evaluate_policy_and_write_to_db(num_timesteps, policy):
-  with sqlite3.connect(config['db_path']) as database:
-    cursor = database.cursor()
-    current_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_total_timesteps, created_at) VALUES (?, ?);', (num_timesteps, current_time))
-    policy_id = cursor.lastrowid
-    policy_data = [(int(policy_id), int(fitness), int(lambda_minus_one)) for fitness, lambda_minus_one in policy.items()]
-    cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda_minus_one) VALUES (?, ?, ?);', policy_data)
-
-  seed_for_generating_episode_seeds = numpy.random.randint(999_999)
-  episode_seed_generator = numpy.random.RandomState(seed_for_generating_episode_seeds)
-  num_function_evaluations_list = []
-
-  num_evaluation_episodes = config['num_evaluation_episodes']
-  for episode_index in range(num_evaluation_episodes):
-    print(f"Policy: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
-    episode_seed = episode_seed_generator.randint(999_999)
-    num_function_evaluations, num_evaluation_timesteps = evaluate_episode(policy, episode_seed)
-    num_function_evaluations_list.append((policy_id, episode_seed, num_evaluation_timesteps, num_function_evaluations))
-
-  with sqlite3.connect(config['db_path'], timeout=10) as database:
-    cursor = database.cursor()
-    cursor.executemany(
-      'INSERT INTO EVALUATION_EPISODES (policy_id, episode_seed, episode_length, num_function_evaluations) VALUES (?, ?, ?, ?);',
-      num_function_evaluations_list
-    )
-
-  only_fitness = [int(lambda_minus_one) for fitness, lambda_minus_one in policy.items()]
-  print("policy", only_fitness)
-
-
-
-
-
-
-
 def main():
-  print("HALLO!")
   load_config()
-
-  random_seed = config['random_seed']
-  numpy.random.seed(random_seed)
-
+  numpy.random.seed(config['random_seed'])
   database = setup_database(config['db_path'])
   create_tables(database)
   insert_config(database, config)
@@ -382,102 +335,118 @@ def main():
   num_evaluation_episodes = config['num_evaluation_episodes']
   n = config['n']
 
-  env_seed = numpy.random.randint(999_999)
-  class OneMaxOLLWrapper(gymnasium.Env):
-      def __init__(self, c=None):
-          # Extract parameters from the config
-          n = config['n']
-          num_actions = config['num_lambdas']
-          state_type = config['state_type']
-          action_type = config['action_type']
-          reward_type = config['reward_type']
 
-          # Initialize the OneMaxOLL environment with the specified parameters
-          self.env = OneMaxOLL(
-              n=n,
-              seed=env_seed,
-              num_actions=num_actions,
-              state_type=state_type,
-              action_type=action_type,
-              reward_type=reward_type,
+
+  class PPOCallback(BaseCallback):
+    def __init__(self, verbose=0):
+      super(PPOCallback, self).__init__(verbose)
+      self.evaluation_results = []
+
+    def _on_step(self):
+      if self.num_timesteps % config['num_timesteps_per_evaluation'] == 0:
+
+        if config['state_type'] == 'ONE_HOT_ENCODED':
+          policy = {obs_value: self.model.predict(create_fitness_vector(obs_value), deterministic=True)[0].item() for obs_value in range(n)}
+        if config['state_type'] == 'SCALAR_ENCODED':
+          policy = {obs_value: self.model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
+
+        with sqlite3.connect(config['db_path']) as database:
+          cursor = database.cursor()
+          current_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
+          cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_total_timesteps, created_at) VALUES (?, ?);', (self.num_timesteps, current_time))
+          policy_id = cursor.lastrowid
+          policy_data = [(int(policy_id), int(fitness), int(lambda_minus_one)) for fitness, lambda_minus_one in policy.items()]
+          cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda_minus_one) VALUES (?, ?, ?);', policy_data)
+
+        seed_for_generating_episode_seeds = numpy.random.randint(999_999)
+        episode_seed_generator = numpy.random.RandomState(seed_for_generating_episode_seeds)
+        num_function_evaluations_list = []
+
+        for episode_index in range(num_evaluation_episodes):
+          print(f"Policy: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
+          episode_seed = episode_seed_generator.randint(999_999)
+          num_function_evaluations, num_evaluation_timesteps = evaluate_episode(policy, episode_seed)
+          num_function_evaluations_list.append((policy_id, episode_seed, num_evaluation_timesteps, num_function_evaluations))
+
+        with sqlite3.connect(config['db_path'], timeout=10) as database:
+          cursor = database.cursor()
+          cursor.executemany(
+            'INSERT INTO EVALUATION_EPISODES (policy_id, episode_seed, episode_length, num_function_evaluations) VALUES (?, ?, ?, ?);',
+            num_function_evaluations_list
           )
 
-          # Set this wrapper's action and observation space to match the inner environment
-          self.action_space = self.env.action_space
-          self.observation_space = self.env.observation_space
+        only_fitness = [int(lambda_minus_one) for fitness, lambda_minus_one in policy.items()]
+        print("policy", only_fitness)
 
-      def reset(self, *, seed=None, options=None):
-          return self.env.reset(seed)
+      return True
 
-      def step(self, action):
-          return self.env.step(action)
 
-      def render(self, mode='human'):
-          return self.env.render(mode)
 
-      def close(self):
-          return self.env.close()
-
-  import ray
-  from ray.rllib.utils import check_env
-  env = OneMaxOLLWrapper()
-  check_env(env)
-
-  from ray.rllib.algorithms.ppo import PPOConfig
-  from ray.tune.logger import pretty_print
-  algo = (
-    PPOConfig()
-    .rollouts(rollout_fragment_length=config['num_timesteps_per_evaluation'], num_rollout_workers=1)
-    .resources(num_gpus=0)
-    .environment(env=OneMaxOLLWrapper)
-    .build()
+  ppo_seed = numpy.random.randint(999_999)
+  set_random_seed(ppo_seed)
+  ppo_agent = PPO(
+    config['ppo']['policy'],
+    OneMaxOLL(
+      n = n,
+      seed = ppo_seed,
+      num_actions = config['num_lambdas'],
+      state_type = config['state_type'],
+      action_type = config['action_type'],
+      reward_type = config['reward_type'],
+    ),
+    policy_kwargs = {'net_arch': config['ppo']['net_arch'], 'activation_fn': torch.nn.ReLU},
+    learning_rate = config['ppo']['learning_rate'],
+    n_steps = config['ppo']['n_steps'],
+    batch_size = config['ppo']['batch_size'],
+    n_epochs = config['ppo']['n_epochs'],
+    gamma = config['ppo']['gamma'],
+    gae_lambda = config['ppo']['gae_lambda'],
+    vf_coef = config['ppo']['vf_coef'],
+    ent_coef = config['ppo']['ent_coef'],
+    clip_range = config['ppo']['clip_range'],
+    verbose = 1,
   )
-  inspectify.d(algo)
-  base_checkpoint_dir = "computed/ray/"
-  num_training_iterations = 10
-  for training_iteration in range(num_training_iterations):
-    result = algo.train()
-    print(pretty_print(result))
-    checkpoint_dir = os.path.join(base_checkpoint_dir, str(training_iteration + 1))
-    os.makedirs(checkpoint_dir, exist_ok=True)
-    algo.save_checkpoint(checkpoint_dir)
+
+  # ================== EVALUATION OF FIRST POLICY ==================================================
+  if config['state_type'] == 'ONE_HOT_ENCODED':
+    policy = {obs_value: ppo_agent.predict(create_fitness_vector(obs_value), deterministic=True)[0].item() for obs_value in range(n)}
+  if config['state_type'] == 'SCALAR_ENCODED':
+    policy = {obs_value: ppo_agent.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
+
+  with sqlite3.connect(config['db_path']) as database:
+    cursor = database.cursor()
+    current_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_total_timesteps, created_at) VALUES (?, ?);', (0, current_time))
+    policy_id = cursor.lastrowid
+    policy_data = [(int(policy_id), int(fitness), int(lambda_minus_one)) for fitness, lambda_minus_one in policy.items()]
+    cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda_minus_one) VALUES (?, ?, ?);', policy_data)
+
+  seed_for_generating_episode_seeds = numpy.random.randint(999_999)
+  episode_seed_generator = numpy.random.RandomState(seed_for_generating_episode_seeds)
+  num_function_evaluations_list = []
+
+  for episode_index in range(num_evaluation_episodes):
+    print(f"Policy: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
+    episode_seed = episode_seed_generator.randint(999_999)
+    num_function_evaluations, num_evaluation_timesteps = evaluate_episode(policy, episode_seed)
+    num_function_evaluations_list.append((policy_id, episode_seed, num_evaluation_timesteps, num_function_evaluations))
+
+  with sqlite3.connect(config['db_path'], timeout=10) as database:
+    cursor = database.cursor()
+    cursor.executemany(
+      'INSERT INTO EVALUATION_EPISODES (policy_id, episode_seed, episode_length, num_function_evaluations) VALUES (?, ?, ?, ?);',
+      num_function_evaluations_list
+    )
+
+  only_fitness = [int(lambda_minus_one) for fitness, lambda_minus_one in policy.items()]
+  print("policy", only_fitness)
+  # ================== EVALUATION OF FIRST POLICY ==================================================
 
 
 
-
-    algo = PPOConfig().environment(env=OneMaxOLLWrapper).build()
-    algo.restore(checkpoint_dir)
-
-    # Generate all possible states
-    n = config['n']  # Number of dimensions
-    all_states = numpy.arange(n).reshape(-1, 1)
-
-    # Predict actions for all states
-    predicted_actions = []
-    policy = {}
-    for state in all_states:
-      action = algo.compute_single_action(state)
-      predicted_actions.append(action)
-      policy[state[0]] = action
+  ppo_agent.learn(total_timesteps=config['max_training_timesteps'], callback=PPOCallback())
 
 
-
-    inspectify.d(predicted_actions)
-    inspectify.d(policy)
-    inspectify.d(algo.config["rollout_fragment_length"])
-    evaluate_policy_and_write_to_db(training_iteration + 1, policy)
-
-
-
-
-
-
-
-
-
-
-
-    print(f"Checkpoint saved in directory {checkpoint_dir}")
 
 if __name__ == '__main__':
   main()
