@@ -64,6 +64,9 @@ fi
 # Source the environment variables if the Python script was successful
 source "$temp_env_file"
 
+# Export OO__SLURM_JOB_ID with SLURM_JOB_ID value if set
+[[ -n ${SLURM_JOB_ID:-} ]] && export OO__SLURM_JOB_ID=$SLURM_JOB_ID
+
 # Continue with the rest of the script
 python src/generate.py
 

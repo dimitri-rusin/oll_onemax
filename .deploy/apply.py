@@ -9,26 +9,20 @@ def main():
   parser.add_argument('--clean', action='store_true', help='Clean the environment variables instead of setting them')
   args = parser.parse_args()
 
-  # Detect the shell type
-  shell = os.getenv('SHELL')
-
   try:
     with open(args.filepath) as file:
       config = yaml.safe_load(file)
     filename = os.path.basename(args.filepath)
-    set_or_unset_env_vars(config, args.clean, shell)
+    set_or_unset_env_vars(config, args.clean)
   except FileNotFoundError:
     print(f"Error: '{args.filepath}' does not exist.", file=sys.stderr)
     sys.exit(1)
 
-def set_or_unset_env_vars(config, clean, shell):
+def set_or_unset_env_vars(config, clean):
   for key, value in flatten_config(config, 'OO_'):
     env_var_name = key.upper()
     if clean:
-      if 'fish' in shell:
-        print(f'set -e {env_var_name}')
-      else:
-        print(f'unset {env_var_name}')
+      print(f'unset {env_var_name}')
     else:
       # Convert the value to a string
       value_str = str(value)
