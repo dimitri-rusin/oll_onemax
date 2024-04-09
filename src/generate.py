@@ -63,6 +63,7 @@ class OneMaxOLL(gymnasium.Env):
     self.num_total_timesteps = 0
     self.num_total_function_evaluations = 0
     self.reward_type = reward_type
+    self.num_timesteps_with_teacher = config['num_timesteps_with_teacher']
 
   def reset(self, seed = None):
     if seed is not None:
@@ -115,11 +116,16 @@ class OneMaxOLL(gymnasium.Env):
       self.current_solution = y
 
     num_evaluations_of_this_step = int(ne1 + ne2)
-    assert self.reward_type in ['ONLY_EVALUATIONS', 'EVALUATIONS_PLUS_FITNESS']
-    if self.reward_type == 'ONLY_EVALUATIONS':
-      reward = -num_evaluations_of_this_step
-    if self.reward_type == 'EVALUATIONS_PLUS_FITNESS':
-      reward = -num_evaluations_of_this_step + (self.current_solution.fitness - prior_fitness)
+
+    if self.num_total_timesteps < self.num_timesteps_with_teacher:
+      reward = -(λ - int(numpy.sqrt(self.dimensionality / (self.dimensionality - prior_fitness)))) ** 2
+    else:
+      assert self.reward_type in ['ONLY_EVALUATIONS', 'EVALUATIONS_PLUS_FITNESS']
+      if self.reward_type == 'ONLY_EVALUATIONS':
+        reward = -num_evaluations_of_this_step
+      if self.reward_type == 'EVALUATIONS_PLUS_FITNESS':
+        reward = -num_evaluations_of_this_step + (self.current_solution.fitness - prior_fitness)
+
     terminated = self.current_solution.is_optimal()
     info = {}
 
@@ -172,10 +178,10 @@ def insert_config(database, config):
     for key, value in config.items():
       database.execute('INSERT INTO CONFIG (key, value) VALUES (?, ?)', (key, str(value)))
 
-def insert_theory_derived_policy(database, num_dimensions):
+def insert_theory_derived_policy(database, dimensionality):
   """Insert the theory-derived policy with policy_id -1."""
   policy_id = -1
-  theory_derived_lambda_policy = {fitness : int(numpy.sqrt(num_dimensions / (num_dimensions - fitness))) for fitness in range(num_dimensions)}
+  theory_derived_lambda_policy = {fitness : int(numpy.sqrt(dimensionality / (dimensionality - fitness))) for fitness in range(dimensionality)}
   insert_policy_and_get_id(database, theory_derived_lambda_policy, policy_id)
 
 def insert_policy_and_get_id(database, lambda_policy, policy_id=None):
