@@ -168,8 +168,20 @@ def create_tables(database):
 
 def insert_config(database, config):
   """Insert config dictionary into CONFIG table."""
+  def flatten_config(prefix, nested_config):
+    items = []
+    for key, value in nested_config.items():
+      new_key = f"{prefix}__{key}" if prefix else key
+      if isinstance(value, dict):
+        items.extend(flatten_config(new_key, value))
+      else:
+        items.append((new_key, value))
+    return items
+
+  flattened_config = flatten_config('', config)
+
   with database:
-    for key, value in config.items():
+    for key, value in flattened_config:
       database.execute('INSERT INTO CONFIG (key, value) VALUES (?, ?)', (key, str(value)))
 
 def insert_theory_derived_policy(database, num_dimensions):
@@ -244,28 +256,11 @@ def fetch_policy(database, policy_id):
   rows = cursor.fetchall()
   return {fitness: lambda_val for fitness, lambda_val in rows}
 
-def drop_all_tables(db_path):
-
-  if not os.path.exists(db_path): return
-
-  """Drop all tables from the database and delete from sqlite_sequence if it exists."""
-  with sqlite3.connect(db_path) as database:
-    cursor = database.cursor()
-    # Check if sqlite_sequence table exists
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sqlite_sequence';")
-    if cursor.fetchone():
-      cursor.execute("DELETE FROM sqlite_sequence;")
-
-    # Retrieve a list of all tables in the database
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-    tables = cursor.fetchall()
-    # Generate a script to drop all tables
-    drop_script = "\n".join([f"DROP TABLE IF EXISTS {table[0]};" for table in tables if table[0] != "sqlite_sequence"])
-    cursor.executescript(drop_script)
-
 def setup_database(db_path):
   """Prepare the database, creating necessary directories and tables."""
-  drop_all_tables(db_path)
+
+  if os.path.isfile(db_path):
+    os.remove(db_path)
 
   directory_path = os.path.dirname(db_path)
   if not os.path.exists(directory_path):
