@@ -28,9 +28,9 @@ config = None
 # ============== ENVIRONMENT - BEGIN ==============
 
 class OneMaxOLL(gymnasium.Env):
-  def __init__(self, n, seed, reward_type, action_type, actions, state_type):
+  def __init__(self, dimensionality, seed, reward_type, action_type, actions, state_type):
     super(OneMaxOLL, self).__init__()
-    self.n = n
+    self.dimensionality = dimensionality
     assert actions is not None
 
     # We use a numpy array, because λ is a numpy.int64 in step().
@@ -49,9 +49,9 @@ class OneMaxOLL(gymnasium.Env):
       )
 
     if state_type == 'SCALAR_ENCODED':
-      self.observation_space = gymnasium.spaces.Box(low=0, high=n - 1, shape=(1,), dtype=numpy.int32)
+      self.observation_space = gymnasium.spaces.Box(low=0, high=dimensionality - 1, shape=(1,), dtype=numpy.int32)
     if state_type == 'ONE_HOT_ENCODED':
-      self.observation_space = gymnasium.spaces.Box(low=0, high=1, shape=(n,), dtype=numpy.int32)
+      self.observation_space = gymnasium.spaces.Box(low=0, high=1, shape=(dimensionality,), dtype=numpy.int32)
     self.state_type = state_type
 
     self.seed = seed
@@ -72,10 +72,10 @@ class OneMaxOLL(gymnasium.Env):
     random_number_generator_seed = self.random.randint(999_999)
     self.random_number_generator = numpy.random.default_rng(random_number_generator_seed)
 
-    initial_fitness = self.n
-    while initial_fitness >= self.n:
+    initial_fitness = self.dimensionality
+    while initial_fitness >= self.dimensionality:
       self.current_solution = dacbench_adjustments.onell_algs.OneMax(
-        self.n,
+        self.dimensionality,
         rng = self.random_number_generator,
         ratio_of_optimal_bits = config['probability_of_closeness_to_optimum'],
       )
@@ -96,7 +96,7 @@ class OneMaxOLL(gymnasium.Env):
 
     λ = self.actions[action_index]
 
-    p = λ / self.n
+    p = λ / self.dimensionality
     population_size = numpy.round(λ).astype(int)
     prior_fitness = self.current_solution.fitness
     xprime, f_xprime, ne1 = self.current_solution.mutate(p, population_size, self.random_number_generator)
@@ -140,8 +140,8 @@ class OneMaxOLL(gymnasium.Env):
 # ============== ENVIRONMENT - END ==============
 
 def create_fitness_vector(fitness):
-  fitness_vector = numpy.zeros(config['n'], dtype=numpy.int32)
-  if fitness < config['n']:
+  fitness_vector = numpy.zeros(config['dimensionality'], dtype=numpy.int32)
+  if fitness < config['dimensionality']:
     fitness_vector[fitness] = 1
   return fitness_vector
 
@@ -199,7 +199,7 @@ def insert_policy_and_get_id(database, lambda_policy, policy_id=None):
       )
   return policy_id
 
-def evaluate_policy(policy_id, db_path, n, seed_for_generating_episode_seeds, num_evaluation_episodes):
+def evaluate_policy(policy_id, db_path, dimensionality, seed_for_generating_episode_seeds, num_evaluation_episodes):
   """Evaluate policy using multiple processes."""
   policy = fetch_policy(sqlite3.connect(db_path), policy_id)
 
@@ -228,9 +228,9 @@ def evaluate_episode(lambda_policy, episode_seed):
 
   policy_list = [λ for _, λ in lambda_policy.items()]
 
-  n = len(lambda_policy)
+  dimensionality = len(lambda_policy)
   num_function_evaluations, num_evaluation_timesteps = onell_algs_rs.onell_lambda(
-    n,
+    dimensionality,
     policy_list,
     episode_seed,
     999_999_999,
@@ -326,16 +326,16 @@ def main():
   create_tables(database)
   insert_config(database, config)
   seed_for_generating_episode_seeds = numpy.random.randint(999_999)
-  insert_theory_derived_policy(database, config['n'])
+  insert_theory_derived_policy(database, config['dimensionality'])
   evaluate_policy(
     -1,
     config['db_path'],
-    config['n'],
+    config['dimensionality'],
     seed_for_generating_episode_seeds,
     config['num_evaluation_episodes'],
   )
   num_evaluation_episodes = config['num_evaluation_episodes']
-  n = config['n']
+  dimensionality = config['dimensionality']
 
   lambdas = numpy.array(config['lambdas'], dtype = numpy.int64)
 
@@ -348,9 +348,9 @@ def main():
       if self.num_timesteps % config['num_timesteps_per_evaluation'] == 0:
 
         if config['state_type'] == 'ONE_HOT_ENCODED':
-          index_policy = {obs_value: self.model.predict(create_fitness_vector(obs_value), deterministic=True)[0].item() for obs_value in range(n)}
+          index_policy = {obs_value: self.model.predict(create_fitness_vector(obs_value), deterministic=True)[0].item() for obs_value in range(dimensionality)}
         if config['state_type'] == 'SCALAR_ENCODED':
-          index_policy = {obs_value: self.model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
+          index_policy = {obs_value: self.model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(dimensionality)}
 
         lambda_policy = {}
         for observation, action_index in index_policy.items():
@@ -395,7 +395,7 @@ def main():
   ppo_agent = PPO(
     config['ppo']['policy'],
     OneMaxOLL(
-      n = n,
+      dimensionality = dimensionality,
       seed = ppo_seed,
       actions = config['lambdas'],
       state_type = config['state_type'],
@@ -418,9 +418,9 @@ def main():
 
   # ================== EVALUATION OF FIRST POLICY ==================================================
   if config['state_type'] == 'ONE_HOT_ENCODED':
-    index_policy = {obs_value: ppo_agent.predict(create_fitness_vector(obs_value), deterministic=True)[0].item() for obs_value in range(n)}
+    index_policy = {obs_value: ppo_agent.predict(create_fitness_vector(obs_value), deterministic=True)[0].item() for obs_value in range(dimensionality)}
   if config['state_type'] == 'SCALAR_ENCODED':
-    index_policy = {obs_value: ppo_agent.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
+    index_policy = {obs_value: ppo_agent.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(dimensionality)}
 
   lambda_policy = {}
   for observation, action_index in index_policy.items():
