@@ -1,4 +1,5 @@
 from datetime import datetime
+from gymnasium.spaces import Dict, Discrete
 from stable_baselines3 import PPO
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
@@ -13,13 +14,12 @@ import numpy
 import onell_algs_rs
 import os
 import sqlite3
-import sys
 import time
 import torch
 import yaml
 
-import sys
 import pathlib
+import sys
 sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
 import dacbench_adjustments.onell_algs
 
@@ -28,23 +28,25 @@ config = None
 # ============== ENVIRONMENT - BEGIN ==============
 
 class OneMaxOLL(gymnasium.Env):
-  def __init__(
-    self,
-    n,
-    seed=None,
-    reward_type = 'ONLY_EVALUATIONS',
-    action_type='DISCRETE',
-    num_actions=None,
-    state_type='ONE_HOT_ENCODED',
-  ):
+  def __init__(self, n, seed, reward_type, action_type, actions, state_type):
     super(OneMaxOLL, self).__init__()
     self.n = n
-    assert num_actions is not None
+    assert actions is not None
+
+    # We use a numpy array, because λ is a numpy.int64 in step().
+    self.actions = numpy.array(actions, dtype = numpy.int64)
+
     assert action_type in ['DISCRETE', 'CONTINUOUS']
     if action_type == 'DISCRETE':
-      self.action_space = gymnasium.spaces.Discrete(num_actions)
+      self.action_space = gymnasium.spaces.Discrete(self.actions.shape[0])
     if action_type == 'CONTINUOUS':
-      self.action_space = gymnasium.spaces.Box(low=0, high=num_actions - 1, shape=(1,), dtype=numpy.float64)
+      assert False, "Check Continuous action space logic in step()."
+      self.action_space = gymnasium.spaces.Box(
+        low=config['continuous_actions_high'],
+        high=config['continuous_actions_high'],
+        shape=(1,),
+        dtype=numpy.float64,
+      )
 
     if state_type == 'SCALAR_ENCODED':
       self.observation_space = gymnasium.spaces.Box(low=0, high=n - 1, shape=(1,), dtype=numpy.int32)
@@ -54,7 +56,8 @@ class OneMaxOLL(gymnasium.Env):
 
     self.seed = seed
     self.random = numpy.random.RandomState(self.seed)
-    self.random_number_generator = numpy.random.default_rng(self.seed)
+    random_number_generator_seed = self.random.randint(999_999)
+    self.random_number_generator = numpy.random.default_rng(random_number_generator_seed)
     self.current_solution = None
     self.num_function_evaluations = None
     self.num_total_timesteps = 0
@@ -62,12 +65,12 @@ class OneMaxOLL(gymnasium.Env):
     self.reward_type = reward_type
 
   def reset(self, seed = None):
-    # Use the provided seed for reproducibility
     if seed is not None:
       self.seed = seed
     self.num_function_evaluations = 0
     self.random = numpy.random.RandomState(self.seed)
-    self.random_number_generator = numpy.random.default_rng(self.seed)
+    random_number_generator_seed = self.random.randint(999_999)
+    self.random_number_generator = numpy.random.default_rng(random_number_generator_seed)
 
     initial_fitness = self.n
     while initial_fitness >= self.n:
@@ -89,12 +92,9 @@ class OneMaxOLL(gymnasium.Env):
 
     return fitness_array, {}
 
-  def step(self, λ):
+  def step(self, action_index):
 
-    if isinstance(λ, numpy.ndarray) and λ.size == 1:
-      λ = λ.item()
-
-    λ += 1
+    λ = self.actions[action_index]
 
     p = λ / self.n
     population_size = numpy.round(λ).astype(int)
@@ -149,7 +149,7 @@ def create_tables(database):
   """Create necessary tables in the database."""
   with database:
     database.executescript('''
-      CREATE TABLE IF NOT EXISTS POLICY_DETAILS (policy_id INTEGER, fitness INTEGER, lambda_minus_one INTEGER);
+      CREATE TABLE IF NOT EXISTS POLICY_DETAILS (policy_id INTEGER, fitness INTEGER, lambda INTEGER);
 
       CREATE TABLE IF NOT EXISTS CONSTRUCTED_POLICIES (
         policy_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -174,22 +174,29 @@ def insert_config(database, config):
 
 def insert_theory_derived_policy(database, num_dimensions):
   """Insert the theory-derived policy with policy_id -1."""
-  policy_lambdas = [int(numpy.sqrt(num_dimensions / (num_dimensions - fitness))) - 1 for fitness in range(num_dimensions)]
-  # - 1, because the environment expects lambda - 1.
-  policy_id = -1  # Theory-derived policy ID
-  insert_policy_and_get_id(database, policy_lambdas, policy_id)
+  policy_id = -1
+  theory_derived_lambda_policy = {fitness : int(numpy.sqrt(num_dimensions / (num_dimensions - fitness))) for fitness in range(num_dimensions)}
+  insert_policy_and_get_id(database, theory_derived_lambda_policy, policy_id)
 
-def insert_policy_and_get_id(database, policy, policy_id=None):
-  """Insert policy into POLICY_DETAILS and return the generated policy_id."""
-  with database:  # This automatically begins and commits/rollbacks a transaction
+def insert_policy_and_get_id(database, lambda_policy, policy_id=None):
+  """Insert lambda_policy into POLICY_DETAILS and return the generated policy_id."""
+  with database:
     cursor = database.cursor()
     if policy_id is None:
       cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_training_episodes) VALUES (?);', (0,))
       policy_id = cursor.lastrowid
     else:
-      cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (policy_id, num_total_timesteps, num_training_episodes, num_total_function_evaluations, mean_initial_fitness, variance_initial_fitness) VALUES (?, ?, ?, ?, ?, ?);', (policy_id, 0, 0, 0, 0, 0))
-    cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda_minus_one) VALUES (?, ?, ?);',
-                       [(policy_id, int(fitness), int(lambda_minus_one)) for fitness, lambda_minus_one in enumerate(policy)])
+      cursor.execute(
+        'INSERT INTO CONSTRUCTED_POLICIES '
+        '(policy_id, num_total_timesteps, num_training_episodes, '
+        'num_total_function_evaluations, mean_initial_fitness, variance_initial_fitness) '
+        'VALUES (?, ?, ?, ?, ?, ?);',
+        (policy_id, 0, 0, 0, 0, 0)
+      )
+      cursor.executemany(
+        'INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda) VALUES (?, ?, ?);',
+        [(policy_id, int(fitness), int(lambda_)) for fitness, lambda_ in lambda_policy.items()]
+      )
   return policy_id
 
 def evaluate_policy(policy_id, db_path, n, seed_for_generating_episode_seeds, num_evaluation_episodes):
@@ -216,17 +223,12 @@ def evaluate_policy(policy_id, db_path, n, seed_for_generating_episode_seeds, nu
         episode_data
       )
 
-def evaluate_episode(policy, episode_seed):
-  """Simulate an episode based on the policy and return fitness at each step."""
+def evaluate_episode(lambda_policy, episode_seed):
+  """Simulate an episode based on the lambda_policy and return fitness at each step."""
 
-  policy_list = []
-  for _, λ in policy.items():
-    if isinstance(λ, numpy.ndarray) and λ.size == 1:
-      λ = λ.item()
-    λ += 1
-    policy_list.append(λ)
+  policy_list = [λ for _, λ in lambda_policy.items()]
 
-  n = len(policy)
+  n = len(lambda_policy)
   num_function_evaluations, num_evaluation_timesteps = onell_algs_rs.onell_lambda(
     n,
     policy_list,
@@ -240,9 +242,9 @@ def evaluate_episode(policy, episode_seed):
 def fetch_policy(database, policy_id):
   """Fetch a policy from the database and reconstruct it as a dictionary."""
   cursor = database.cursor()
-  cursor.execute('SELECT fitness, lambda_minus_one FROM POLICY_DETAILS WHERE policy_id = ?', (policy_id,))
+  cursor.execute('SELECT fitness, lambda FROM POLICY_DETAILS WHERE policy_id = ?', (policy_id,))
   rows = cursor.fetchall()
-  return {fitness: lambda_val for fitness, lambda_val in rows}
+  return {fitness: lambda_ for fitness, lambda_ in rows}
 
 def drop_all_tables(db_path):
 
@@ -335,7 +337,7 @@ def main():
   num_evaluation_episodes = config['num_evaluation_episodes']
   n = config['n']
 
-
+  lambdas = numpy.array(config['lambdas'], dtype = numpy.int64)
 
   class PPOCallback(BaseCallback):
     def __init__(self, verbose=0):
@@ -346,17 +348,21 @@ def main():
       if self.num_timesteps % config['num_timesteps_per_evaluation'] == 0:
 
         if config['state_type'] == 'ONE_HOT_ENCODED':
-          policy = {obs_value: self.model.predict(create_fitness_vector(obs_value), deterministic=True)[0].item() for obs_value in range(n)}
+          index_policy = {obs_value: self.model.predict(create_fitness_vector(obs_value), deterministic=True)[0].item() for obs_value in range(n)}
         if config['state_type'] == 'SCALAR_ENCODED':
-          policy = {obs_value: self.model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
+          index_policy = {obs_value: self.model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
+
+        lambda_policy = {}
+        for observation, action_index in index_policy.items():
+          lambda_policy[observation] = lambdas[action_index]
 
         with sqlite3.connect(config['db_path']) as database:
           cursor = database.cursor()
           current_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
           cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_total_timesteps, created_at) VALUES (?, ?);', (self.num_timesteps, current_time))
           policy_id = cursor.lastrowid
-          policy_data = [(int(policy_id), int(fitness), int(lambda_minus_one)) for fitness, lambda_minus_one in policy.items()]
-          cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda_minus_one) VALUES (?, ?, ?);', policy_data)
+          policy_data = [(int(policy_id), int(fitness), int(lambda_)) for fitness, lambda_ in lambda_policy.items()]
+          cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda) VALUES (?, ?, ?);', policy_data)
 
         seed_for_generating_episode_seeds = numpy.random.randint(999_999)
         episode_seed_generator = numpy.random.RandomState(seed_for_generating_episode_seeds)
@@ -365,7 +371,7 @@ def main():
         for episode_index in range(num_evaluation_episodes):
           print(f"Policy: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
           episode_seed = episode_seed_generator.randint(999_999)
-          num_function_evaluations, num_evaluation_timesteps = evaluate_episode(policy, episode_seed)
+          num_function_evaluations, num_evaluation_timesteps = evaluate_episode(lambda_policy, episode_seed)
           num_function_evaluations_list.append((policy_id, episode_seed, num_evaluation_timesteps, num_function_evaluations))
 
         with sqlite3.connect(config['db_path'], timeout=10) as database:
@@ -375,8 +381,10 @@ def main():
             num_function_evaluations_list
           )
 
-        only_fitness = [int(lambda_minus_one) for fitness, lambda_minus_one in policy.items()]
-        print("policy", only_fitness)
+        only_fitness = [int(lambda_) for fitness, lambda_ in lambda_policy.items()]
+        print("lambda_policy", only_fitness)
+        only_fitness = [int(lambda_) for fitness, lambda_ in index_policy.items()]
+        print("index_policy", only_fitness)
 
       return True
 
@@ -389,7 +397,7 @@ def main():
     OneMaxOLL(
       n = n,
       seed = ppo_seed,
-      num_actions = config['num_lambdas'],
+      actions = config['lambdas'],
       state_type = config['state_type'],
       action_type = config['action_type'],
       reward_type = config['reward_type'],
@@ -407,19 +415,24 @@ def main():
     verbose = 1,
   )
 
+
   # ================== EVALUATION OF FIRST POLICY ==================================================
   if config['state_type'] == 'ONE_HOT_ENCODED':
-    policy = {obs_value: ppo_agent.predict(create_fitness_vector(obs_value), deterministic=True)[0].item() for obs_value in range(n)}
+    index_policy = {obs_value: ppo_agent.predict(create_fitness_vector(obs_value), deterministic=True)[0].item() for obs_value in range(n)}
   if config['state_type'] == 'SCALAR_ENCODED':
-    policy = {obs_value: ppo_agent.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
+    index_policy = {obs_value: ppo_agent.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(n)}
+
+  lambda_policy = {}
+  for observation, action_index in index_policy.items():
+    lambda_policy[observation] = lambdas[action_index]
 
   with sqlite3.connect(config['db_path']) as database:
     cursor = database.cursor()
     current_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
     cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_total_timesteps, created_at) VALUES (?, ?);', (0, current_time))
     policy_id = cursor.lastrowid
-    policy_data = [(int(policy_id), int(fitness), int(lambda_minus_one)) for fitness, lambda_minus_one in policy.items()]
-    cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda_minus_one) VALUES (?, ?, ?);', policy_data)
+    policy_data = [(int(policy_id), int(fitness), int(lambda_)) for fitness, lambda_ in lambda_policy.items()]
+    cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda) VALUES (?, ?, ?);', policy_data)
 
   seed_for_generating_episode_seeds = numpy.random.randint(999_999)
   episode_seed_generator = numpy.random.RandomState(seed_for_generating_episode_seeds)
@@ -428,7 +441,7 @@ def main():
   for episode_index in range(num_evaluation_episodes):
     print(f"Policy: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
     episode_seed = episode_seed_generator.randint(999_999)
-    num_function_evaluations, num_evaluation_timesteps = evaluate_episode(policy, episode_seed)
+    num_function_evaluations, num_evaluation_timesteps = evaluate_episode(lambda_policy, episode_seed)
     num_function_evaluations_list.append((policy_id, episode_seed, num_evaluation_timesteps, num_function_evaluations))
 
   with sqlite3.connect(config['db_path'], timeout=10) as database:
@@ -438,8 +451,10 @@ def main():
       num_function_evaluations_list
     )
 
-  only_fitness = [int(lambda_minus_one) for fitness, lambda_minus_one in policy.items()]
-  print("policy", only_fitness)
+  only_fitness = [int(lambda_) for fitness, lambda_ in lambda_policy.items()]
+  print("lambda_policy", only_fitness)
+  only_fitness = [int(lambda_) for fitness, lambda_ in index_policy.items()]
+  print("index_policy", only_fitness)
   # ================== EVALUATION OF FIRST POLICY ==================================================
 
 

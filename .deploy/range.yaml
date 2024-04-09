@@ -3,7 +3,7 @@
   max_training_timesteps: [500_000]
   n: [80]
   num_evaluation_episodes: [1_000]
-  num_lambdas: [8]
+  lambdas: [[4, 5, 6, 8]]
   num_timesteps_per_evaluation: [4_000]
   ppo:
     batch_size: [100]
