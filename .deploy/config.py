@@ -21,7 +21,7 @@ def load_wordlist(filename):
   with open(filename, 'r') as file:
     return [line.strip().split()[1] for line in file]
 
-def generate_filename_from_config(single_config, wordlist, num_words):
+def generate_filename_from_config(single_config, wordlist):
   # This "default_flow_style=None" makes sure that we get lists with "[]" rather than with "-". Because "-" creates new lines and we want to keep it concise.
 
   yaml = ruamel.yaml.YAML()
@@ -29,27 +29,34 @@ def generate_filename_from_config(single_config, wordlist, num_words):
   yaml.dump(single_config, stream)
   config_str = stream.getvalue()
 
+  max_words = 16 # because we have 32 bytes and we use 2 bytes to find one word in the downloaded word list, so 16 words at max
   digest = hashlib.sha256(config_str.encode()).hexdigest()
   words = []
-  for i in range(0, num_words * 4, 4):
+  for i in range(0, max_words * 4, 4):
     index = int(digest[i:i+4], 16) % len(wordlist)
     words.append(wordlist[index])
   return words
 
 def prune_filenames(filenames):
-  first_word_count = {}
-  for words in filenames:
-    first_word = words[0]
-    first_word_count[first_word] = first_word_count.get(first_word, 0) + 1
+    # Count how many filenames start with each first word
+    first_word_count = {words[0]: 0 for words in filenames}
+    for words in filenames:
+        first_word_count[words[0]] += 1
 
-  pruned_filenames = []
-  for words in filenames:
-    if first_word_count[words[0]] == 1:
-      pruned_filenames.append(words[0])
-    else:
-      pruned_filenames.append('_'.join(words))
+    pruned_filenames = []
+    for words in filenames:
+        if first_word_count[words[0]] > 1:
+            # If the first word is not unique, use at least two words
+            for i in range(2, len(words) + 1):
+                candidate_filename = '_'.join(words[:i])
+                if candidate_filename not in pruned_filenames:
+                    pruned_filenames.append(candidate_filename)
+                    break
+        else:
+            # If the first word is unique, use only one word
+            pruned_filenames.append(words[0])
 
-  return pruned_filenames
+    return pruned_filenames
 
 def expand_config(config):
   expanded_config = {}
@@ -61,7 +68,7 @@ def expand_config(config):
       expanded_config[key] = value
   return expanded_config
 
-def write_config_to_yaml(configs, wordlist, num_words):
+def write_config_to_yaml(configs, wordlist):
 
   yaml = ruamel.yaml.YAML()
   yaml.indent(mapping=2, sequence=4, offset=2)
@@ -88,7 +95,7 @@ def write_config_to_yaml(configs, wordlist, num_words):
         else:
           nested_config[key] = value
 
-      filename_words = generate_filename_from_config(nested_config, wordlist, num_words)
+      filename_words = generate_filename_from_config(nested_config, wordlist)
       all_filenames.append((nested_config, filename_words))
 
   pruned_filenames = prune_filenames([words for _, words in all_filenames])
@@ -123,4 +130,4 @@ if __name__ == '__main__':
   # Download word list from: https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt
   wordlist = load_wordlist('.deploy/eff_large_wordlist.txt')
 
-  write_config_to_yaml(configs, wordlist, num_words=5)
+  write_config_to_yaml(configs, wordlist)
