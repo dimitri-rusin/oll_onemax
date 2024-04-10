@@ -39,10 +39,10 @@ squeue -u $USER | grep 5598911
 
 ```sh
 # This will run first config via bash.
-find config/continuous/ -name '*.yaml' -print0 | xargs -0 -I {} bash .deploy/RUN_GENERATE {}
+find config/continuous/ -name '*.yaml' -print0 | xargs -0 -I {} bash .deploy/RUN {}
 
 # This will run all configs via sbatch.
-find config/continuous/ -name '*.yaml' -print0 | xargs -0 -I {} sbatch .deploy/RUN_GENERATE {}
+find config/continuous/ -name '*.yaml' -print0 | xargs -0 -I {} sbatch .deploy/RUN {}
 ```
 
 Convert .py to .ipynb:

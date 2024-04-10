@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-# We export the environment variables using apply.py.
-# The goal is to have the environment variables available, that will specify the way SLURM is executed.
-
 # Exit immediately on errors, treat unset variables as an error, and fail on error in any pipeline
 set -euo pipefail
 
@@ -59,3 +56,13 @@ fi
 # Source the environment variables if the Python script was successful
 source "$temp_env_file"
 rm -f "$temp_env_file"
+
+sbatch \
+  --account=$OO__SLURM__ACCOUNT \
+  --cpus-per-task=$OO__SLURM__CPUS_PER_TASK \
+  --nodes=$OO__SLURM__NODES \
+  --partition=$OO__SLURM__PARTITION \
+  --qos=$OO__SLURM__QOS \
+  --ntasks-per-node=$OO__SLURM__NTASKS_PER_NODE \
+  --time=$OO__SLURM__TIME \
+  .deploy/RUN
