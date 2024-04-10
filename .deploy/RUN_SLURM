@@ -79,4 +79,5 @@ sbatch \
   --qos=$OO__SLURM__QOS \
   --ntasks-per-node=$OO__SLURM__NTASKS_PER_NODE \
   --time=$OO__SLURM__TIME \
-  .deploy/RUN_LOCAL
+  .deploy/RUN_LOCAL \
+  "$yaml_path"
