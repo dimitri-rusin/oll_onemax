@@ -57,25 +57,19 @@ fi
 source "$temp_env_file"
 rm -f "$temp_env_file"
 
-
+# Check SLURM time parameter.
+# ========================================================================
 check_time_format() {
   local time=$1
 
   # Check if the time format is HH:MM:SS
   if ! [[ $time =~ ^[0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]; then
-    echo "incorrect $time"
-    return 1  # Return an error code from the function
+    echo "Please use two digits per hour, minute, second in --time: $time"
+    return 1
   fi
 }
-
 check_time_format "$OO__SLURM__TIME"
-
-
-# Check if the time format is HH:MM:SS
-if ! [[ $time =~ ^[0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]; then
-  echo "Please use two digits per hour, minute, second in --time: $time"
-
-fi
+# ========================================================================
 
 sbatch \
   --account=$OO__SLURM__ACCOUNT \
@@ -85,4 +79,4 @@ sbatch \
   --qos=$OO__SLURM__QOS \
   --ntasks-per-node=$OO__SLURM__NTASKS_PER_NODE \
   --time=$OO__SLURM__TIME \
-  .deploy/RUN
+  .deploy/RUN_LOCAL
