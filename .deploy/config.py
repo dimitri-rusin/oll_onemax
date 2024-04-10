@@ -1,12 +1,15 @@
+import io
 import argparse
 import hashlib
 import itertools
 import os
 import re
+import ruamel.yaml
 import socket
-import yaml
 
 
+def represent_list(dumper, data):
+    return dumper.represent_sequence('tag:yaml.org,2002:seq', data, flow_style=True)
 
 def represent_int(dumper, data):
   return dumper.represent_scalar("tag:yaml.org,2002:int", pretty_print_int(data))
@@ -20,7 +23,12 @@ def load_wordlist(filename):
 
 def generate_filename_from_config(single_config, wordlist, num_words):
   # This "default_flow_style=None" makes sure that we get lists with "[]" rather than with "-". Because "-" creates new lines and we want to keep it concise.
-  config_str = yaml.dump(single_config, default_flow_style=None)
+
+  yaml = ruamel.yaml.YAML()
+  stream = io.StringIO()
+  yaml.dump(single_config, stream)
+  config_str = stream.getvalue()
+
   digest = hashlib.sha256(config_str.encode()).hexdigest()
   words = []
   for i in range(0, num_words * 4, 4):
@@ -54,7 +62,13 @@ def expand_config(config):
   return expanded_config
 
 def write_config_to_yaml(configs, wordlist, num_words):
-  yaml.add_representer(int, represent_int)
+
+  yaml = ruamel.yaml.YAML()
+  yaml.indent(mapping=2, sequence=4, offset=2)
+  yaml.preserve_quotes = True
+  yaml.representer.add_representer(int, represent_int)
+  yaml.representer.add_representer(list, represent_list)
+
   all_filenames = []
 
   for config in configs:
@@ -84,8 +98,9 @@ def write_config_to_yaml(configs, wordlist, num_words):
     single_config["db_path"] = single_config["db_path"].replace("{wordhash}", pruned_filename)
     config_path = single_config["db_path"]
     single_config["db_path"] = single_config["db_path"].replace("{hostname}", hostname)
-    yaml_content = yaml.dump(single_config, default_flow_style=None)
-
+    stream = io.StringIO()
+    yaml.dump(single_config, stream)
+    yaml_content = stream.getvalue()
 
     config_path = config_path.replace("{hostname}/", "")
     config_path = config_path.replace("computed", "config")
@@ -100,9 +115,10 @@ def write_config_to_yaml(configs, wordlist, num_words):
 
 
 if __name__ == '__main__':
-  yaml_file_path = '.deploy/range.yaml'
+  yaml_file_path = '.deploy/config.yaml'
+  yaml = ruamel.yaml.YAML(typ='safe')
   with open(yaml_file_path, 'r') as file:
-    configs = yaml.safe_load(file)
+    configs = yaml.load(file)
 
   # Download word list from: https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt
   wordlist = load_wordlist('.deploy/eff_large_wordlist.txt')

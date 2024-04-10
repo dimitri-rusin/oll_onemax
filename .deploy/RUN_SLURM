@@ -1,13 +1,5 @@
 #!/usr/bin/env bash
 
-#SBATCH --account=sc122-dimitri
-#SBATCH --cpus-per-task=1
-#SBATCH --nodes=1
-#SBATCH --partition=standard
-#SBATCH --qos=standard
-#SBATCH --tasks-per-node=1
-#SBATCH --time=7:00:00
-
 # Exit immediately on errors, treat unset variables as an error, and fail on error in any pipeline
 set -euo pipefail
 
@@ -63,12 +55,34 @@ fi
 
 # Source the environment variables if the Python script was successful
 source "$temp_env_file"
-
-# Export OO__SLURM_JOB_ID with SLURM_JOB_ID value if set
-[[ -n ${SLURM_JOB_ID:-} ]] && export OO__SLURM_JOB_ID=$SLURM_JOB_ID
-
-# Continue with the rest of the script
-python src/generate.py
-
-# Clean up the temporary file
 rm -f "$temp_env_file"
+
+
+check_time_format() {
+  local time=$1
+
+  # Check if the time format is HH:MM:SS
+  if ! [[ $time =~ ^[0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]; then
+    echo "incorrect $time"
+    return 1  # Return an error code from the function
+  fi
+}
+
+check_time_format "$OO__SLURM__TIME"
+
+
+# Check if the time format is HH:MM:SS
+if ! [[ $time =~ ^[0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]; then
+  echo "Please use two digits per hour, minute, second in --time: $time"
+
+fi
+
+sbatch \
+  --account=$OO__SLURM__ACCOUNT \
+  --cpus-per-task=$OO__SLURM__CPUS_PER_TASK \
+  --nodes=$OO__SLURM__NODES \
+  --partition=$OO__SLURM__PARTITION \
+  --qos=$OO__SLURM__QOS \
+  --ntasks-per-node=$OO__SLURM__NTASKS_PER_NODE \
+  --time=$OO__SLURM__TIME \
+  .deploy/RUN

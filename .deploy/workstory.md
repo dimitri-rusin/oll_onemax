@@ -4,6 +4,20 @@
 
 
 
+
+
+
+
+
+```sh
+.deploy/RUN config/ppo/guy.yaml
+.deploy/RUN_SBATCH config/compare_cont_disc/climatic.yaml
+```
+
+
+
+
+
 ```sh
 
 
