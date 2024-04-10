@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+
+# Exit immediately on errors, treat unset variables as an error, and fail on error in any pipeline
+set -euo pipefail
+
+if [ "$(whoami)" = "dimitri_rusin" ]; then
+  module load anaconda3/2023.09
+  cd /work/sc122/sc122/dimitri_rusin/oll_onemax/
+fi
+
+# Find the path to the conda executable
+conda_path=$(which conda)
+
+# Determine the path to conda.sh based on the conda executable location
+if [[ "$conda_path" == */condabin/conda ]]; then
+  conda_sh_path="${conda_path%/condabin/conda}/etc/profile.d/conda.sh"
+elif [[ "$conda_path" == */bin/conda ]]; then
+  conda_sh_path="${conda_path%/bin/conda}/etc/profile.d/conda.sh"
+else
+  echo "Error: Unable to locate the conda.sh file."
+  exit 1
+fi
+
+# Source conda.sh if it exists, else export PATH
+if [ -f "$conda_sh_path" ]; then
+  echo "Sourcing: $conda_sh_path"
+  source "$conda_sh_path"
+else
+  echo "Exporting PATH with Conda bin directory"
+  export PATH="${conda_path%/bin/conda}/bin:$PATH"
+fi
+
+conda activate .deploy/conda_environment
+
+python .deploy/config.py
