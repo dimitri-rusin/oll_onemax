@@ -4,7 +4,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.evaluation import evaluate_policy as ep
-from stable_baselines3.common.utils import set_random_seed
+import stable_baselines3.common.utils
 import collections.abc
 import datetime
 import gymnasium
@@ -97,7 +97,6 @@ class OneMaxOLL(gymnasium.Env):
 
     λ = self.actions[action_index]
     prior_fitness = self.current_solution.fitness
-
 
     population_size = numpy.round(λ).astype(int)
     p = λ / self.dimensionality
@@ -347,6 +346,9 @@ def main():
       self.evaluation_results = []
 
     def _on_step(self):
+
+      # self.num_timesteps is the number of timesteps made across all environments, for each environment we have made n_steps steps.
+
       if self.num_timesteps % config['num_timesteps_per_evaluation'] == 0:
 
         if config['state_type'] == 'ONE_HOT_ENCODED':
@@ -390,20 +392,27 @@ def main():
 
       return True
 
+  sb3_seed = numpy.random.randint(999_999)
+  stable_baselines3.common.utils.set_random_seed(sb3_seed)
 
+  # Create a function to instantiate the environment with different seeds
+  def create_env():
+    seed = numpy.random.randint(999_999)
+    return OneMaxOLL(
+      dimensionality=dimensionality,
+      seed=seed,
+      actions=config['lambdas'],
+      state_type=config['state_type'],
+      action_type=config['action_type'],
+      reward_type=config['reward_type']
+    )
 
-  ppo_seed = numpy.random.randint(999_999)
-  set_random_seed(ppo_seed)
+  env_seeds = [numpy.random.randint(999_999) for _ in range(config['num_environments'])]
+  environments = make_vec_env(create_env, n_envs=config['num_environments'])
+
   ppo_agent = PPO(
-    config['ppo']['policy'],
-    OneMaxOLL(
-      dimensionality = dimensionality,
-      seed = ppo_seed,
-      actions = config['lambdas'],
-      state_type = config['state_type'],
-      action_type = config['action_type'],
-      reward_type = config['reward_type'],
-    ),
+    policy = config['ppo']['policy'],
+    env = environments,
     policy_kwargs = {'net_arch': config['ppo']['net_arch'], 'activation_fn': torch.nn.ReLU},
     learning_rate = config['ppo']['learning_rate'],
     n_steps = config['ppo']['n_steps'],
@@ -416,7 +425,6 @@ def main():
     clip_range = config['ppo']['clip_range'],
     verbose = 1,
   )
-
 
   # ================== EVALUATION OF FIRST POLICY ==================================================
   if config['state_type'] == 'ONE_HOT_ENCODED':

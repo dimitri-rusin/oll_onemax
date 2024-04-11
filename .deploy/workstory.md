@@ -10,11 +10,18 @@
 
 
 ```sh
+code /home/dimitri/code/oll_onemax_visualization/src/visualize.ipynb
+
+
+
 # This will run first config via bash.
 find config/continuous/ -name '*.yaml' -print0 | xargs -0 -I {} .deploy/RUN_LOCAL {}
 
 # This will run all configs via sbatch.
 find config/test/ -name '*.yaml' -print0 | xargs -0 -I {} .deploy/RUN_SLURM {}
+
+rm -rf /home/dimitri/code/oll_onemax/computed/cirrus-login2/test
+rsync -avz --progress cirrus:/work/sc122/sc122/dimitri_rusin/oll_onemax/computed/cirrus-login2/test/ /home/dimitri/code/oll_onemax/computed/cirrus-login2/test
 ```
 
 
