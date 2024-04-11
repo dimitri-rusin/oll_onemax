@@ -1,7 +1,6 @@
 from datetime import datetime
 from gymnasium.spaces import Dict, Discrete
 from stable_baselines3 import PPO
-from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.evaluation import evaluate_policy as ep
@@ -97,10 +96,11 @@ class OneMaxOLL(gymnasium.Env):
   def step(self, action_index):
 
     λ = self.actions[action_index]
-
-    p = λ / self.dimensionality
-    population_size = numpy.round(λ).astype(int)
     prior_fitness = self.current_solution.fitness
+
+
+    population_size = numpy.round(λ).astype(int)
+    p = λ / self.dimensionality
     xprime, f_xprime, ne1 = self.current_solution.mutate(p, population_size, self.random_number_generator)
 
     c = 1 / λ
