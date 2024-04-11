@@ -1,6 +1,6 @@
 [submodule "dacbench"]
-	path = dacbench
-	url = https://github.com/automl/DACBench.git
+  path = dacbench
+  url = https://github.com/automl/DACBench.git
 [submodule "DE0CH_OLL"]
 	path = DE0CH_OLL
 	url = https://github.com/dimitri-rusin/OLL.git

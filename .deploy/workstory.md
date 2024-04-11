@@ -1,5 +1,20 @@
 
 
+Instead of modifying the .gitmodules file directly, run this command:
+```sh
+git submodule add https://github.com/dimitri-rusin/OLL.git DE0CH_OLL
+
+git submodule deinit -f --all
+git submodule init
+git submodule update
+
+git submodule add --force https://github.com/dimitri-rusin/OLL.git DE0CH_OLL
+```
+
+```sh
+git submodule update --init --recursive
+```
+
 
 
 

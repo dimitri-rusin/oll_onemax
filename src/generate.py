@@ -20,8 +20,9 @@ import yaml
 
 import pathlib
 import sys
-sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
-import dacbench_adjustments.onell_algs
+import_path = str(pathlib.Path(__file__).resolve().parent.parent)
+sys.path.append(import_path)
+import DE0CH_OLL.tuned_with_irace.onell_algs
 
 config = None
 
@@ -75,7 +76,7 @@ class OneMaxOLL(gymnasium.Env):
 
     initial_fitness = self.dimensionality
     while initial_fitness >= self.dimensionality:
-      self.current_solution = dacbench_adjustments.onell_algs.OneMax(
+      self.current_solution = DE0CH_OLL.tuned_with_irace.onell_algs.OneMax(
         self.dimensionality,
         rng = self.random_number_generator,
         ratio_of_optimal_bits = config['probability_of_closeness_to_optimum'],
