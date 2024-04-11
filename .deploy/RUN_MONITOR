@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+# Exit immediately on errors, treat unset variables as an error, and fail on error in any pipeline
+set -euo pipefail
+
+squeue -u $USER

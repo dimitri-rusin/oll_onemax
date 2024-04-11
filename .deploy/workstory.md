@@ -1,5 +1,25 @@
 
 
+
+
+
+
+
+
+
+
+
+```sh
+# This will run first config via bash.
+find config/continuous/ -name '*.yaml' -print0 | xargs -0 -I {} .deploy/RUN_LOCAL {}
+
+# This will run all configs via sbatch.
+find config/test/ -name '*.yaml' -print0 | xargs -0 -I {} .deploy/RUN_SLURM {}
+```
+
+
+
+
 Instead of modifying the .gitmodules file directly, run this command:
 ```sh
 git submodule add https://github.com/dimitri-rusin/OLL.git DE0CH_OLL
@@ -54,10 +74,10 @@ squeue -u $USER | grep 5598911
 
 ```sh
 # This will run first config via bash.
-find config/continuous/ -name '*.yaml' -print0 | xargs -0 -I {} bash .deploy/RUN {}
+find config/continuous/ -name '*.yaml' -print0 | xargs -0 -I {} bash .deploy/RUN_LOCAL {}
 
 # This will run all configs via sbatch.
-find config/continuous/ -name '*.yaml' -print0 | xargs -0 -I {} sbatch .deploy/RUN {}
+find config/test/ -name '*.yaml' -print0 | xargs -0 -I {} sbatch .deploy/RUN_LOCAL {}
 ```
 
 Convert .py to .ipynb:
