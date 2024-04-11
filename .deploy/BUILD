@@ -40,7 +40,7 @@ conda activate base
 
 # Clean up any previous Conda environment and build targets
 rm -rf .deploy/conda_environment/
-rm -rf dacbench_adjustments/onell_algs_rs/target/
+rm -rf DE0CH_OLL/onell_algs_rs/target/
 
 # Create and activate a new Conda environment based on .conda.yaml configuration
 conda env create --prefix .deploy/conda_environment/ --file .deploy/conda.yaml --debug
@@ -49,15 +49,20 @@ conda activate .deploy/conda_environment/
 # Install Python dependencies from the requirements file
 pip install --requirement .deploy/pip.txt
 
-# Uncomment the following lines to install and configure Rust (if necessary for your project)
-# curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-# export PATH="$HOME/.cargo/bin:$PATH"
+# Check if Cargo is installed. If not install Cargo. Then install maturin.
+if ! command -v $HOME/.cargo/bin/cargo &> /dev/null
+then
+    echo "Cargo is not installed. Installing Cargo..."
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+fi
+
+$HOME/.cargo/bin/cargo install maturin --version 1.5.1
 
 # Build Rust project using maturin, within its directory (isolated in a subshell)
 (
-  cd dacbench_adjustments/onell_algs_rs/
+  cd DE0CH_OLL/onell_algs_rs/
   maturin build --release
 )
 
 # Find and install the Python wheel files built by maturin
-find dacbench_adjustments/onell_algs_rs/target/wheels -name "*.whl" -print0 | xargs -0 pip install --force-reinstall
+find DE0CH_OLL/onell_algs_rs/target/wheels -name "*.whl" -print0 | xargs -0 pip install --force-reinstall
