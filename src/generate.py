@@ -24,18 +24,20 @@ class OneMaxOLL(gymnasium.Env):
     super(OneMaxOLL, self).__init__()
     self.dimensionality = dimensionality
 
-    # We use a numpy array, because λ is a numpy.int64 in step().
+    self.mutation_rates = numpy.array(config['mutation_rates'], dtype = numpy.float64)
     self.mutation_sizes = numpy.array(config['mutation_sizes'], dtype = numpy.int64)
+    self.crossover_rates = numpy.array(config['crossover_rates'], dtype = numpy.float64)
     self.crossover_sizes = numpy.array(config['crossover_sizes'], dtype = numpy.int64)
 
     assert action_type in ['DISCRETE', 'CONTINUOUS']
     if action_type == 'DISCRETE':
-      self.action_space = gymnasium.spaces.Tuple((
-        gymnasium.spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=numpy.float64),
-        gymnasium.spaces.Discrete(n=self.mutation_sizes.shape[0]),
-        gymnasium.spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=numpy.float64),
-        gymnasium.spaces.Discrete(n=self.crossover_sizes.shape[0]),
-      ))
+      self.action_space = gymnasium.spaces.MultiDiscrete([
+        self.mutation_rates.shape[0],
+        self.mutation_sizes.shape[0],
+        self.crossover_rates.shape[0],
+        self.crossover_sizes.shape[0],
+      ])
+
     if action_type == 'CONTINUOUS':
       assert False, "Check Continuous action space logic in step()."
       self.action_space = gymnasium.spaces.Box(
@@ -58,7 +60,6 @@ class OneMaxOLL(gymnasium.Env):
     self.num_total_timesteps = 0
     self.num_total_function_evaluations = 0
     self.reward_type = reward_type
-    self.num_timesteps_with_teacher = config['num_timesteps_with_teacher']
 
   def reset(self, seed = None):
     if seed is not None:
@@ -88,18 +89,19 @@ class OneMaxOLL(gymnasium.Env):
 
   def step(self, action_index):
 
-    λ = self.actions[action_index]
+    mutation_rate = self.mutation_rates[action_index[0]]
+    mutation_size = self.mutation_sizes[action_index[1]]
+    crossover_rate = self.crossover_rates[action_index[2]]
+    crossover_size = self.crossover_sizes[action_index[3]]
+
     prior_fitness = self.current_solution.fitness
 
-    population_size = numpy.round(λ).astype(int)
-    p = λ / self.dimensionality
-    xprime, f_xprime, ne1 = self.current_solution.mutate(p, population_size, self.random_number_generator)
+    xprime, f_xprime, ne1 = self.current_solution.mutate(mutation_rate, mutation_size, self.random_number_generator)
 
-    c = 1 / λ
     y, f_y, ne2 = self.current_solution.crossover(
       xprime,
-      c,
-      population_size,
+      crossover_rate,
+      crossover_size,
       True,
       True,
       self.random_number_generator,
@@ -110,14 +112,11 @@ class OneMaxOLL(gymnasium.Env):
 
     num_evaluations_of_this_step = int(ne1 + ne2)
 
-    if self.num_total_timesteps < self.num_timesteps_with_teacher:
-      reward = -(λ - int(numpy.sqrt(self.dimensionality / (self.dimensionality - prior_fitness)))) ** 2
-    else:
-      assert self.reward_type in ['ONLY_EVALUATIONS', 'EVALUATIONS_PLUS_FITNESS']
-      if self.reward_type == 'ONLY_EVALUATIONS':
-        reward = -num_evaluations_of_this_step
-      if self.reward_type == 'EVALUATIONS_PLUS_FITNESS':
-        reward = -num_evaluations_of_this_step + (self.current_solution.fitness - prior_fitness)
+    assert self.reward_type in ['ONLY_EVALUATIONS', 'EVALUATIONS_PLUS_FITNESS']
+    if self.reward_type == 'ONLY_EVALUATIONS':
+      reward = -num_evaluations_of_this_step
+    if self.reward_type == 'EVALUATIONS_PLUS_FITNESS':
+      reward = -num_evaluations_of_this_step + (self.current_solution.fitness - prior_fitness)
 
     terminated = self.current_solution.is_optimal()
     info = {}
@@ -297,7 +296,9 @@ def main():
         episode_data
       )
 
+  mutation_rates = numpy.array(config['mutation_rates'], dtype = numpy.float64)
   mutation_sizes = numpy.array(config['mutation_sizes'], dtype = numpy.int64)
+  crossover_rates = numpy.array(config['crossover_rates'], dtype = numpy.float64)
   crossover_sizes = numpy.array(config['crossover_sizes'], dtype = numpy.int64)
 
   class PPOCallback(stable_baselines3.common.callbacks.BaseCallback):
@@ -311,28 +312,30 @@ def main():
       if self.num_timesteps % config['num_timesteps_per_evaluation'] == 0:
 
         if config['state_type'] == 'ONE_HOT_ENCODED':
-          index_policy = {obs_value: self.model.predict(create_fitness_vector(obs_value), deterministic=True)[0].item() for obs_value in range(dimensionality)}
+          index_policy = {int(obs_value): self.model.predict(create_fitness_vector(obs_value), deterministic=True)[0].tolist() for obs_value in range(dimensionality)}
         if config['state_type'] == 'SCALAR_ENCODED':
-          index_policy = {obs_value: self.model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(dimensionality)}
+          index_policy = {int(obs_value): self.model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0].tolist() for obs_value in range(dimensionality)}
 
         size_policy = {}
-        for fitness, (mutation_rate, mutation_size_index, crossover_rate, crossover_size_index) in index_policy.items():
-          size_policy[fitness] = (mutation_rate, mutation_sizes[mutation_size_index], crossover_rate, crossover_sizes[crossover_size_index])
+        for fitness, (mutation_rate_index, mutation_size_index, crossover_rate_index, crossover_size_index) in index_policy.items():
+          size_policy[fitness] = (mutation_rates[mutation_rate_index], int(mutation_sizes[mutation_size_index]), crossover_rates[crossover_rate_index], int(crossover_sizes[crossover_size_index]))
 
         with sqlite3.connect(config['db_path']) as database:
           cursor = database.cursor()
           current_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
           cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_total_timesteps, created_at) VALUES (?, ?);', (self.num_timesteps, current_time))
           policy_id = cursor.lastrowid
-          policy_data = [(int(policy_id), int(fitness), int(lambda_)) for fitness, lambda_ in size_policy.items()]
-          cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda) VALUES (?, ?, ?);', policy_data)
+          cursor.executemany(
+            'INSERT INTO POLICY_DETAILS (policy_id, fitness, mutation_rate, mutation_size, crossover_rate, crossover_size) VALUES (?, ?, ?, ?, ?, ?);',
+            [(policy_id, fitness, mutation_rate, mutation_size, crossover_rate, crossover_size) for fitness, (mutation_rate, mutation_size, crossover_rate, crossover_size) in size_policy.items()]
+          )
 
         seed_for_generating_episode_seeds = numpy.random.randint(int(1e9))
         episode_seed_generator = numpy.random.RandomState(seed_for_generating_episode_seeds)
         num_function_evaluations_list = []
 
         for episode_index in range(num_evaluation_episodes):
-          print(f"Policy: Evaluating episode {episode_index + 1:,} / {num_evaluation_episodes:,}.")
+          print(f"Policy {policy_id}: Evaluating episode {episode_index + 1:,} / {num_evaluation_episodes:,}.")
           episode_seed = episode_seed_generator.randint(int(1e9))
           num_function_evaluations, num_evaluation_timesteps = evaluate_episode(size_policy, episode_seed)
           num_function_evaluations_list.append((policy_id, episode_seed, num_evaluation_timesteps, num_function_evaluations))
@@ -344,10 +347,8 @@ def main():
             num_function_evaluations_list
           )
 
-        only_fitness = [int(lambda_) for fitness, lambda_ in size_policy.items()]
-        print("size_policy", only_fitness)
-        only_fitness = [int(lambda_) for fitness, lambda_ in index_policy.items()]
-        print("index_policy", only_fitness)
+        print("size_policy", size_policy)
+        print("index_policy", index_policy)
 
       return True
 
@@ -385,28 +386,31 @@ def main():
 
   # ================== EVALUATION OF FIRST POLICY ==================================================
   if config['state_type'] == 'ONE_HOT_ENCODED':
-    index_policy = {obs_value: ppo_agent.predict(create_fitness_vector(obs_value), deterministic=True)[0].item() for obs_value in range(dimensionality)}
+    index_policy = {int(obs_value): ppo_agent.predict(create_fitness_vector(obs_value), deterministic=True)[0].tolist() for obs_value in range(dimensionality)}
   if config['state_type'] == 'SCALAR_ENCODED':
-    index_policy = {obs_value: ppo_agent.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(dimensionality)}
+    index_policy = {int(obs_value): ppo_agent.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0].tolist() for obs_value in range(dimensionality)}
 
   size_policy = {}
-  for fitness, (mutation_rate, mutation_size_index, crossover_rate, crossover_size_index) in index_policy.items():
-    size_policy[fitness] = (mutation_rate, mutation_sizes[mutation_size_index], crossover_rate, crossover_sizes[crossover_size_index])
+  for fitness, (mutation_rate_index, mutation_size_index, crossover_rate_index, crossover_size_index) in index_policy.items():
+    size_policy[fitness] = (mutation_rates[mutation_rate_index], int(mutation_sizes[mutation_size_index]), crossover_rates[crossover_rate_index], int(crossover_sizes[crossover_size_index]))
 
   with sqlite3.connect(config['db_path']) as database:
     cursor = database.cursor()
     current_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
     cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_total_timesteps, created_at) VALUES (?, ?);', (0, current_time))
     policy_id = cursor.lastrowid
-    policy_data = [(int(policy_id), int(fitness), int(lambda_)) for fitness, lambda_ in size_policy.items()]
-    cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda) VALUES (?, ?, ?);', policy_data)
+    cursor.executemany(
+      'INSERT INTO POLICY_DETAILS (policy_id, fitness, mutation_rate, mutation_size, crossover_rate, crossover_size) VALUES (?, ?, ?, ?, ?, ?);',
+      [(policy_id, fitness, mutation_rate, mutation_size, crossover_rate, crossover_size) for fitness, (mutation_rate, mutation_size, crossover_rate, crossover_size) in size_policy.items()]
+    )
 
   seed_for_generating_episode_seeds = numpy.random.randint(int(1e9))
   episode_seed_generator = numpy.random.RandomState(seed_for_generating_episode_seeds)
   num_function_evaluations_list = []
 
   for episode_index in range(num_evaluation_episodes):
-    print(f"Policy: Evaluating episode {episode_index + 1:,} / {num_evaluation_episodes:,}.")
+    # The first ever row will have cursor.lastrowid equal to 1.
+    print(f"Policy 1: Evaluating episode {episode_index + 1:,} / {num_evaluation_episodes:,}.")
     episode_seed = episode_seed_generator.randint(int(1e9))
     num_function_evaluations, num_evaluation_timesteps = evaluate_episode(size_policy, episode_seed)
     num_function_evaluations_list.append((policy_id, episode_seed, num_evaluation_timesteps, num_function_evaluations))
@@ -418,10 +422,8 @@ def main():
       num_function_evaluations_list
     )
 
-  only_fitness = [int(lambda_) for fitness, lambda_ in size_policy.items()]
-  print("size_policy", only_fitness)
-  only_fitness = [int(lambda_) for fitness, lambda_ in index_policy.items()]
-  print("index_policy", only_fitness)
+  print("size_policy", size_policy)
+  print("index_policy", index_policy)
   # ================== EVALUATION OF FIRST POLICY ==================================================
 
 

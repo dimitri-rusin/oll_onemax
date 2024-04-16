@@ -100,6 +100,7 @@ def write_config_to_yaml(configs, wordlist):
 
   pruned_filenames = prune_filenames([words for _, words in all_filenames])
 
+  is_first_iteration = True
   for (single_config, _), pruned_filename in zip(all_filenames, pruned_filenames):
     hostname = socket.gethostname()
     single_config["db_path"] = single_config["db_path"].replace("{wordhash}", pruned_filename)
@@ -114,8 +115,11 @@ def write_config_to_yaml(configs, wordlist):
     config_path = config_path.replace(".db", ".yaml")
     path_parts = os.path.split(config_path)
     directory_path = path_parts[0]
-    os.makedirs(directory_path, exist_ok=True)
-    assert not os.path.exists(config_path), f"Configuration {config_path} already exists. Please run:\nrm -rf {directory_path}"
+    if is_first_iteration:
+      assert not os.path.exists(directory_path), f"Configuration {config_path} already exists. Please run:\nrm -rf {directory_path}"
+      os.makedirs(directory_path)
+      is_first_iteration = False
+
     with open(config_path, 'w') as file:
       file.write(yaml_content)
 
