@@ -3,7 +3,6 @@ from gymnasium.spaces import Dict, Discrete
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.evaluation import evaluate_policy as ep
 import stable_baselines3.common.utils
 import collections.abc
 import datetime
@@ -55,9 +54,7 @@ class OneMaxOLL(gymnasium.Env):
     self.state_type = state_type
 
     self.seed = seed
-    self.random = numpy.random.RandomState(self.seed)
-    random_number_generator_seed = self.random.randint(999_999)
-    self.random_number_generator = numpy.random.default_rng(random_number_generator_seed)
+    self.random_number_generator = numpy.random.default_rng(self.seed)
     self.current_solution = None
     self.num_function_evaluations = None
     self.num_total_timesteps = 0
@@ -69,9 +66,7 @@ class OneMaxOLL(gymnasium.Env):
     if seed is not None:
       self.seed = seed
     self.num_function_evaluations = 0
-    self.random = numpy.random.RandomState(self.seed)
-    random_number_generator_seed = self.random.randint(999_999)
-    self.random_number_generator = numpy.random.default_rng(random_number_generator_seed)
+    self.random_number_generator = numpy.random.default_rng(self.seed)
 
     initial_fitness = self.dimensionality
     while initial_fitness >= self.dimensionality:
@@ -145,81 +140,34 @@ class OneMaxOLL(gymnasium.Env):
 
 # ============== ENVIRONMENT - END ==============
 
+def evaluate_episode(lambda_policy, episode_seed):
+  """Simulate an episode based on the lambda_policy and return fitness at each step."""
+
+  policy_list = [λ for _, λ in lambda_policy.items()]
+
+  dimensionality = len(lambda_policy)
+  num_function_evaluations, num_evaluation_timesteps = onell_algs_rs.onell_lambda(
+    dimensionality,
+    policy_list,
+    episode_seed,
+    999_999_999,
+    config['probability_of_closeness_to_optimum'],
+  )
+
+  return num_function_evaluations, num_evaluation_timesteps
+
 def create_fitness_vector(fitness):
   fitness_vector = numpy.zeros(config['dimensionality'], dtype=numpy.int32)
   if fitness < config['dimensionality']:
     fitness_vector[fitness] = 1
   return fitness_vector
 
-def create_tables(database):
-  """Create necessary tables in the database."""
-  with database:
-    database.executescript('''
-      CREATE TABLE IF NOT EXISTS POLICY_DETAILS (policy_id INTEGER, fitness INTEGER, lambda INTEGER);
+def evaluate_policy(database, policy_id, db_path, dimensionality, seed_for_generating_episode_seeds, num_evaluation_episodes):
 
-      CREATE TABLE IF NOT EXISTS CONSTRUCTED_POLICIES (
-        policy_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        num_total_timesteps INTEGER,
-        num_training_episodes INTEGER,
-        num_total_function_evaluations INTEGER,
-        mean_initial_fitness DOUBLE,
-        variance_initial_fitness DOUBLE,
-        created_at TEXT, -- ISO8601 format: 'YYYY-MM-DDTHH:MM:SS.SSSZ'
-        FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id)
-      );
-
-      CREATE TABLE IF NOT EXISTS EVALUATION_EPISODES (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, num_function_evaluations INTEGER, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
-      CREATE TABLE IF NOT EXISTS CONFIG (key TEXT PRIMARY KEY, value TEXT);
-    ''')
-
-def insert_config(database, config):
-  """Insert config dictionary into CONFIG table."""
-  def flatten_config(prefix, nested_config):
-    items = []
-    for key, value in nested_config.items():
-      new_key = f"{prefix}__{key}" if prefix else key
-      if isinstance(value, dict):
-        items.extend(flatten_config(new_key, value))
-      else:
-        items.append((new_key, value))
-    return items
-
-  flattened_config = flatten_config('', config)
-
-  with database:
-    for key, value in flattened_config:
-      database.execute('INSERT INTO CONFIG (key, value) VALUES (?, ?)', (key, str(value)))
-
-def insert_theory_derived_policy(database, dimensionality):
-  """Insert the theory-derived policy with policy_id -1."""
-  policy_id = -1
-  theory_derived_lambda_policy = {fitness : int(numpy.sqrt(dimensionality / (dimensionality - fitness))) for fitness in range(dimensionality)}
-  insert_policy_and_get_id(database, theory_derived_lambda_policy, policy_id)
-
-def insert_policy_and_get_id(database, lambda_policy, policy_id=None):
-  """Insert lambda_policy into POLICY_DETAILS and return the generated policy_id."""
-  with database:
-    cursor = database.cursor()
-    if policy_id is None:
-      cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_training_episodes) VALUES (?);', (0,))
-      policy_id = cursor.lastrowid
-    else:
-      cursor.execute(
-        'INSERT INTO CONSTRUCTED_POLICIES '
-        '(policy_id, num_total_timesteps, num_training_episodes, '
-        'num_total_function_evaluations, mean_initial_fitness, variance_initial_fitness) '
-        'VALUES (?, ?, ?, ?, ?, ?);',
-        (policy_id, 0, 0, 0, 0, 0)
-      )
-      cursor.executemany(
-        'INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda) VALUES (?, ?, ?);',
-        [(policy_id, int(fitness), int(lambda_)) for fitness, lambda_ in lambda_policy.items()]
-      )
-  return policy_id
-
-def evaluate_policy(policy_id, db_path, dimensionality, seed_for_generating_episode_seeds, num_evaluation_episodes):
-  """Evaluate policy using multiple processes."""
-  policy = fetch_policy(sqlite3.connect(db_path), policy_id)
+  cursor = database.cursor()
+  cursor.execute('SELECT fitness, lambda FROM POLICY_DETAILS WHERE policy_id = ?', (policy_id,))
+  rows = cursor.fetchall()
+  policy = {fitness: lambda_ for fitness, lambda_ in rows}
 
   episode_seed_generator = numpy.random.RandomState(seed_for_generating_episode_seeds)
   episode_data = []  # List to store episode data
@@ -240,41 +188,6 @@ def evaluate_policy(policy_id, db_path, dimensionality, seed_for_generating_epis
         'INSERT INTO EVALUATION_EPISODES (policy_id, episode_seed, episode_length, num_function_evaluations) VALUES (?, ?, ?, ?);',
         episode_data
       )
-
-def evaluate_episode(lambda_policy, episode_seed):
-  """Simulate an episode based on the lambda_policy and return fitness at each step."""
-
-  policy_list = [λ for _, λ in lambda_policy.items()]
-
-  dimensionality = len(lambda_policy)
-  num_function_evaluations, num_evaluation_timesteps = onell_algs_rs.onell_lambda(
-    dimensionality,
-    policy_list,
-    episode_seed,
-    999_999_999,
-    config['probability_of_closeness_to_optimum'],
-  )
-
-  return num_function_evaluations, num_evaluation_timesteps
-
-def fetch_policy(database, policy_id):
-  """Fetch a policy from the database and reconstruct it as a dictionary."""
-  cursor = database.cursor()
-  cursor.execute('SELECT fitness, lambda FROM POLICY_DETAILS WHERE policy_id = ?', (policy_id,))
-  rows = cursor.fetchall()
-  return {fitness: lambda_ for fitness, lambda_ in rows}
-
-def setup_database(db_path):
-  """Prepare the database, creating necessary directories and tables."""
-
-  if os.path.isfile(db_path):
-    os.remove(db_path)
-
-  directory_path = os.path.dirname(db_path)
-  if not os.path.exists(directory_path):
-    os.makedirs(directory_path, exist_ok=True)
-
-  return sqlite3.connect(db_path)
 
 def load_config():
   global config
@@ -320,15 +233,81 @@ def load_config():
         d = d[part]
       d[key_parts[-1]] = parsed_value
 
+def flatten_config(prefix, nested_config):
+  items = []
+  for key, value in nested_config.items():
+    new_key = f"{prefix}__{key}" if prefix else key
+    if isinstance(value, dict):
+      items.extend(flatten_config(new_key, value))
+    else:
+      items.append((new_key, value))
+  return items
+
+
+
 def main():
+
   load_config()
+
   numpy.random.seed(config['random_seed'])
-  database = setup_database(config['db_path'])
-  create_tables(database)
-  insert_config(database, config)
+
+  if os.path.isfile(config['db_path']):
+    os.remove(config['db_path'])
+
+  directory_path = os.path.dirname(config['db_path'])
+  if not os.path.exists(directory_path):
+    os.makedirs(directory_path, exist_ok=True)
+
+  database = sqlite3.connect(config['db_path'])
+
+  with database:
+    database.executescript('''
+      CREATE TABLE IF NOT EXISTS POLICY_DETAILS (policy_id INTEGER, fitness INTEGER, lambda INTEGER);
+
+      CREATE TABLE IF NOT EXISTS CONSTRUCTED_POLICIES (
+        policy_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        num_total_timesteps INTEGER,
+        num_training_episodes INTEGER,
+        num_total_function_evaluations INTEGER,
+        mean_initial_fitness DOUBLE,
+        variance_initial_fitness DOUBLE,
+        created_at TEXT, -- ISO8601 format: 'YYYY-MM-DDTHH:MM:SS.SSSZ'
+        FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS EVALUATION_EPISODES (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, num_function_evaluations INTEGER, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
+      CREATE TABLE IF NOT EXISTS CONFIG (key TEXT PRIMARY KEY, value TEXT);
+    ''')
+
+  flattened_config = flatten_config('', config)
+
+  with database:
+    for key, value in flattened_config:
+      database.execute('INSERT INTO CONFIG (key, value) VALUES (?, ?)', (key, str(value)))
+
+  policy_id = -1
+  theory_derived_lambda_policy = {fitness : int(numpy.sqrt(config['dimensionality'] / (config['dimensionality'] - fitness))) for fitness in range(config['dimensionality'])}
+  with database:
+    cursor = database.cursor()
+    if policy_id is None:
+      cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_training_episodes) VALUES (?);', (0,))
+      policy_id = cursor.lastrowid
+    else:
+      cursor.execute(
+        'INSERT INTO CONSTRUCTED_POLICIES '
+        '(policy_id, num_total_timesteps, num_training_episodes, '
+        'num_total_function_evaluations, mean_initial_fitness, variance_initial_fitness) '
+        'VALUES (?, ?, ?, ?, ?, ?);',
+        (policy_id, 0, 0, 0, 0, 0)
+      )
+      cursor.executemany(
+        'INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda) VALUES (?, ?, ?);',
+        [(policy_id, int(fitness), int(lambda_)) for fitness, lambda_ in theory_derived_lambda_policy.items()]
+      )
+
   seed_for_generating_episode_seeds = numpy.random.randint(999_999)
-  insert_theory_derived_policy(database, config['dimensionality'])
   evaluate_policy(
+    database,
     -1,
     config['db_path'],
     config['dimensionality'],
@@ -348,7 +327,6 @@ def main():
     def _on_step(self):
 
       # self.num_timesteps is the number of timesteps made across all environments, for each environment we have made n_steps steps.
-
       if self.num_timesteps % config['num_timesteps_per_evaluation'] == 0:
 
         if config['state_type'] == 'ONE_HOT_ENCODED':
@@ -407,7 +385,6 @@ def main():
       reward_type=config['reward_type']
     )
 
-  env_seeds = [numpy.random.randint(999_999) for _ in range(config['num_environments'])]
   environments = make_vec_env(create_env, n_envs=config['num_environments'])
 
   ppo_agent = PPO(
