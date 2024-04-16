@@ -61,6 +61,7 @@ $HOME/.cargo/bin/cargo install maturin --version 1.5.1
 # Build Rust project using maturin, within its directory (isolated in a subshell)
 (
   cd DE0CH_OLL/onell_algs_rs/
+  rm -rf target/
   maturin build --release
 )
 
