@@ -1,10 +1,3 @@
-from datetime import datetime
-from gymnasium.spaces import Dict, Discrete
-from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common.env_util import make_vec_env
-import stable_baselines3.common.utils
-import collections.abc
 import datetime
 import gymnasium
 import inspectify
@@ -12,9 +5,9 @@ import numpy
 import onell_algs_rs
 import os
 import sqlite3
-import time
+import stable_baselines3.common.env_util
+import stable_baselines3.common.utils
 import torch
-import yaml
 
 import pathlib
 import sys
@@ -27,17 +20,22 @@ config = None
 # ============== ENVIRONMENT - BEGIN ==============
 
 class OneMaxOLL(gymnasium.Env):
-  def __init__(self, dimensionality, seed, reward_type, action_type, actions, state_type):
+  def __init__(self, dimensionality, seed, reward_type, action_type, state_type):
     super(OneMaxOLL, self).__init__()
     self.dimensionality = dimensionality
-    assert actions is not None
 
     # We use a numpy array, because λ is a numpy.int64 in step().
-    self.actions = numpy.array(actions, dtype = numpy.int64)
+    self.mutation_sizes = numpy.array(config['mutation_sizes'], dtype = numpy.int64)
+    self.crossover_sizes = numpy.array(config['crossover_sizes'], dtype = numpy.int64)
 
     assert action_type in ['DISCRETE', 'CONTINUOUS']
     if action_type == 'DISCRETE':
-      self.action_space = gymnasium.spaces.Discrete(self.actions.shape[0])
+      self.action_space = gymnasium.spaces.Tuple((
+        gymnasium.spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=numpy.float64),
+        gymnasium.spaces.Discrete(n=self.mutation_sizes.shape[0]),
+        gymnasium.spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=numpy.float64),
+        gymnasium.spaces.Discrete(n=self.crossover_sizes.shape[0]),
+      ))
     if action_type == 'CONTINUOUS':
       assert False, "Check Continuous action space logic in step()."
       self.action_space = gymnasium.spaces.Box(
@@ -162,33 +160,6 @@ def create_fitness_vector(fitness):
     fitness_vector[fitness] = 1
   return fitness_vector
 
-def evaluate_policy(database, policy_id, db_path, dimensionality, seed_for_generating_episode_seeds, num_evaluation_episodes):
-
-  cursor = database.cursor()
-  cursor.execute('SELECT fitness, lambda FROM POLICY_DETAILS WHERE policy_id = ?', (policy_id,))
-  rows = cursor.fetchall()
-  policy = {fitness: lambda_ for fitness, lambda_ in rows}
-
-  episode_seed_generator = numpy.random.RandomState(seed_for_generating_episode_seeds)
-  episode_data = []  # List to store episode data
-
-  for episode_index in range(num_evaluation_episodes):
-    print(f"Policy {policy_id}: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
-    episode_seed = episode_seed_generator.randint(999_999)
-    num_function_evaluations, num_evaluation_timesteps = evaluate_episode(policy, episode_seed)
-
-    # Collect episode data
-    episode_data.append((policy_id, episode_seed, num_evaluation_timesteps, num_function_evaluations))
-
-  # Write all collected data to the database in a single transaction
-  with sqlite3.connect(db_path, timeout=10) as database:
-    with database:  # This automatically handles transactions
-      cursor = database.cursor()
-      cursor.executemany(
-        'INSERT INTO EVALUATION_EPISODES (policy_id, episode_seed, episode_length, num_function_evaluations) VALUES (?, ?, ?, ?);',
-        episode_data
-      )
-
 def load_config():
   global config
   config = {}
@@ -262,7 +233,7 @@ def main():
 
   with database:
     database.executescript('''
-      CREATE TABLE IF NOT EXISTS POLICY_DETAILS (policy_id INTEGER, fitness INTEGER, lambda INTEGER);
+      CREATE TABLE IF NOT EXISTS POLICY_DETAILS (policy_id INTEGER, fitness INTEGER, mutation_rate REAL, mutation_size INTEGER, crossover_rate REAL, crossover_size INTEGER);
 
       CREATE TABLE IF NOT EXISTS CONSTRUCTED_POLICIES (
         policy_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -275,7 +246,7 @@ def main():
         FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id)
       );
 
-      CREATE TABLE IF NOT EXISTS EVALUATION_EPISODES (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, episode_length INTEGER, num_function_evaluations INTEGER, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
+      CREATE TABLE IF NOT EXISTS EVALUATION_EPISODES (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, num_timesteps INTEGER, num_function_evaluations INTEGER, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
       CREATE TABLE IF NOT EXISTS CONFIG (key TEXT PRIMARY KEY, value TEXT);
     ''')
 
@@ -285,8 +256,10 @@ def main():
     for key, value in flattened_config:
       database.execute('INSERT INTO CONFIG (key, value) VALUES (?, ?)', (key, str(value)))
 
+  dimensionality = config['dimensionality']
   policy_id = -1
-  theory_derived_lambda_policy = {fitness : int(numpy.sqrt(config['dimensionality'] / (config['dimensionality'] - fitness))) for fitness in range(config['dimensionality'])}
+  theory_derived_lambda_policy = {fitness : int(numpy.sqrt(dimensionality / (dimensionality - fitness))) for fitness in range(dimensionality)}
+  theory_derived_lambda_policy = {int(fitness): (lambda_ / dimensionality, lambda_, 1. / lambda_, lambda_) for fitness, lambda_ in theory_derived_lambda_policy.items()}
   with database:
     cursor = database.cursor()
     if policy_id is None:
@@ -301,25 +274,34 @@ def main():
         (policy_id, 0, 0, 0, 0, 0)
       )
       cursor.executemany(
-        'INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda) VALUES (?, ?, ?);',
-        [(policy_id, int(fitness), int(lambda_)) for fitness, lambda_ in theory_derived_lambda_policy.items()]
+        'INSERT INTO POLICY_DETAILS (policy_id, fitness, mutation_rate, mutation_size, crossover_rate, crossover_size) VALUES (?, ?, ?, ?, ?, ?);',
+        [(policy_id, fitness, mutation_rate, mutation_size, crossover_rate, crossover_size) for fitness, (mutation_rate, mutation_size, crossover_rate, crossover_size) in theory_derived_lambda_policy.items()]
       )
 
-  seed_for_generating_episode_seeds = numpy.random.randint(999_999)
-  evaluate_policy(
-    database,
-    -1,
-    config['db_path'],
-    config['dimensionality'],
-    seed_for_generating_episode_seeds,
-    config['num_evaluation_episodes'],
-  )
+  db_path = config['db_path']
   num_evaluation_episodes = config['num_evaluation_episodes']
-  dimensionality = config['dimensionality']
+
+
+  seed_for_generating_episode_seeds = numpy.random.randint(999_999)
+  episode_seed_generator = numpy.random.RandomState(seed_for_generating_episode_seeds)
+  episode_data = []
+  for episode_index in range(num_evaluation_episodes):
+    print(f"Policy {policy_id}: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
+    episode_seed = episode_seed_generator.randint(999_999)
+    num_function_evaluations, num_evaluation_timesteps = evaluate_episode(theory_derived_lambda_policy, episode_seed)
+    episode_data.append((policy_id, episode_seed, num_evaluation_timesteps, num_function_evaluations))
+
+  with sqlite3.connect(db_path, timeout=10) as database:
+    with database:
+      cursor = database.cursor()
+      cursor.executemany(
+        'INSERT INTO EVALUATION_EPISODES (policy_id, episode_seed, num_timesteps, num_function_evaluations) VALUES (?, ?, ?, ?);',
+        episode_data
+      )
 
   lambdas = numpy.array(config['lambdas'], dtype = numpy.int64)
 
-  class PPOCallback(BaseCallback):
+  class PPOCallback(stable_baselines3.common.callbacks.BaseCallback):
     def __init__(self, verbose=0):
       super(PPOCallback, self).__init__(verbose)
       self.evaluation_results = []
@@ -359,7 +341,7 @@ def main():
         with sqlite3.connect(config['db_path'], timeout=10) as database:
           cursor = database.cursor()
           cursor.executemany(
-            'INSERT INTO EVALUATION_EPISODES (policy_id, episode_seed, episode_length, num_function_evaluations) VALUES (?, ?, ?, ?);',
+            'INSERT INTO EVALUATION_EPISODES (policy_id, episode_seed, num_timesteps, num_function_evaluations) VALUES (?, ?, ?, ?);',
             num_function_evaluations_list
           )
 
@@ -385,9 +367,9 @@ def main():
       reward_type=config['reward_type']
     )
 
-  environments = make_vec_env(create_env, n_envs=config['num_environments'])
+  environments = stable_baselines3.common.env_util.make_vec_env(create_env, n_envs=config['num_environments'])
 
-  ppo_agent = PPO(
+  ppo_agent = stable_baselines3.PPO(
     policy = config['ppo']['policy'],
     env = environments,
     policy_kwargs = {'net_arch': config['ppo']['net_arch'], 'activation_fn': torch.nn.ReLU},
@@ -434,7 +416,7 @@ def main():
   with sqlite3.connect(config['db_path'], timeout=10) as database:
     cursor = database.cursor()
     cursor.executemany(
-      'INSERT INTO EVALUATION_EPISODES (policy_id, episode_seed, episode_length, num_function_evaluations) VALUES (?, ?, ?, ?);',
+      'INSERT INTO EVALUATION_EPISODES (policy_id, episode_seed, num_timesteps, num_function_evaluations) VALUES (?, ?, ?, ?);',
       num_function_evaluations_list
     )
 
