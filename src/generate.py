@@ -138,17 +138,15 @@ class OneMaxOLL(gymnasium.Env):
 
 # ============== ENVIRONMENT - END ==============
 
-def evaluate_episode(lambda_policy, episode_seed):
-  """Simulate an episode based on the lambda_policy and return fitness at each step."""
+def evaluate_episode(size_policy, episode_seed):
 
-  policy_list = [λ for _, λ in lambda_policy.items()]
-
-  dimensionality = len(lambda_policy)
+  policy_list = [parameter_tuple for _, parameter_tuple in size_policy.items()]
+  dimensionality = len(size_policy)
   num_function_evaluations, num_evaluation_timesteps = onell_algs_rs.onell_lambda(
     dimensionality,
     policy_list,
     episode_seed,
-    999_999_999,
+    int(1e9),
     config['probability_of_closeness_to_optimum'],
   )
 
@@ -258,8 +256,8 @@ def main():
 
   dimensionality = config['dimensionality']
   policy_id = -1
-  theory_derived_lambda_policy = {fitness : int(numpy.sqrt(dimensionality / (dimensionality - fitness))) for fitness in range(dimensionality)}
-  theory_derived_lambda_policy = {int(fitness): (lambda_ / dimensionality, lambda_, 1. / lambda_, lambda_) for fitness, lambda_ in theory_derived_lambda_policy.items()}
+  theory_derived_size_policy = {fitness : int(numpy.sqrt(dimensionality / (dimensionality - fitness))) for fitness in range(dimensionality)}
+  theory_derived_size_policy = {int(fitness): (lambda_ / dimensionality, lambda_, 1. / lambda_, lambda_) for fitness, lambda_ in theory_derived_size_policy.items()}
   with database:
     cursor = database.cursor()
     if policy_id is None:
@@ -275,20 +273,20 @@ def main():
       )
       cursor.executemany(
         'INSERT INTO POLICY_DETAILS (policy_id, fitness, mutation_rate, mutation_size, crossover_rate, crossover_size) VALUES (?, ?, ?, ?, ?, ?);',
-        [(policy_id, fitness, mutation_rate, mutation_size, crossover_rate, crossover_size) for fitness, (mutation_rate, mutation_size, crossover_rate, crossover_size) in theory_derived_lambda_policy.items()]
+        [(policy_id, fitness, mutation_rate, mutation_size, crossover_rate, crossover_size) for fitness, (mutation_rate, mutation_size, crossover_rate, crossover_size) in theory_derived_size_policy.items()]
       )
 
   db_path = config['db_path']
   num_evaluation_episodes = config['num_evaluation_episodes']
 
 
-  seed_for_generating_episode_seeds = numpy.random.randint(999_999)
+  seed_for_generating_episode_seeds = numpy.random.randint(int(1e9))
   episode_seed_generator = numpy.random.RandomState(seed_for_generating_episode_seeds)
   episode_data = []
   for episode_index in range(num_evaluation_episodes):
-    print(f"Policy {policy_id}: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
-    episode_seed = episode_seed_generator.randint(999_999)
-    num_function_evaluations, num_evaluation_timesteps = evaluate_episode(theory_derived_lambda_policy, episode_seed)
+    print(f"Policy {policy_id}: Evaluating episode {episode_index + 1:,} / {num_evaluation_episodes:,}.")
+    episode_seed = episode_seed_generator.randint(int(1e9))
+    num_function_evaluations, num_evaluation_timesteps = evaluate_episode(theory_derived_size_policy, episode_seed)
     episode_data.append((policy_id, episode_seed, num_evaluation_timesteps, num_function_evaluations))
 
   with sqlite3.connect(db_path, timeout=10) as database:
@@ -299,7 +297,8 @@ def main():
         episode_data
       )
 
-  lambdas = numpy.array(config['lambdas'], dtype = numpy.int64)
+  mutation_sizes = numpy.array(config['mutation_sizes'], dtype = numpy.int64)
+  crossover_sizes = numpy.array(config['crossover_sizes'], dtype = numpy.int64)
 
   class PPOCallback(stable_baselines3.common.callbacks.BaseCallback):
     def __init__(self, verbose=0):
@@ -316,26 +315,26 @@ def main():
         if config['state_type'] == 'SCALAR_ENCODED':
           index_policy = {obs_value: self.model.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(dimensionality)}
 
-        lambda_policy = {}
-        for observation, action_index in index_policy.items():
-          lambda_policy[observation] = lambdas[action_index]
+        size_policy = {}
+        for fitness, (mutation_rate, mutation_size_index, crossover_rate, crossover_size_index) in index_policy.items():
+          size_policy[fitness] = (mutation_rate, mutation_sizes[mutation_size_index], crossover_rate, crossover_sizes[crossover_size_index])
 
         with sqlite3.connect(config['db_path']) as database:
           cursor = database.cursor()
           current_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
           cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_total_timesteps, created_at) VALUES (?, ?);', (self.num_timesteps, current_time))
           policy_id = cursor.lastrowid
-          policy_data = [(int(policy_id), int(fitness), int(lambda_)) for fitness, lambda_ in lambda_policy.items()]
+          policy_data = [(int(policy_id), int(fitness), int(lambda_)) for fitness, lambda_ in size_policy.items()]
           cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda) VALUES (?, ?, ?);', policy_data)
 
-        seed_for_generating_episode_seeds = numpy.random.randint(999_999)
+        seed_for_generating_episode_seeds = numpy.random.randint(int(1e9))
         episode_seed_generator = numpy.random.RandomState(seed_for_generating_episode_seeds)
         num_function_evaluations_list = []
 
         for episode_index in range(num_evaluation_episodes):
-          print(f"Policy: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
-          episode_seed = episode_seed_generator.randint(999_999)
-          num_function_evaluations, num_evaluation_timesteps = evaluate_episode(lambda_policy, episode_seed)
+          print(f"Policy: Evaluating episode {episode_index + 1:,} / {num_evaluation_episodes:,}.")
+          episode_seed = episode_seed_generator.randint(int(1e9))
+          num_function_evaluations, num_evaluation_timesteps = evaluate_episode(size_policy, episode_seed)
           num_function_evaluations_list.append((policy_id, episode_seed, num_evaluation_timesteps, num_function_evaluations))
 
         with sqlite3.connect(config['db_path'], timeout=10) as database:
@@ -345,23 +344,22 @@ def main():
             num_function_evaluations_list
           )
 
-        only_fitness = [int(lambda_) for fitness, lambda_ in lambda_policy.items()]
-        print("lambda_policy", only_fitness)
+        only_fitness = [int(lambda_) for fitness, lambda_ in size_policy.items()]
+        print("size_policy", only_fitness)
         only_fitness = [int(lambda_) for fitness, lambda_ in index_policy.items()]
         print("index_policy", only_fitness)
 
       return True
 
-  sb3_seed = numpy.random.randint(999_999)
+  sb3_seed = numpy.random.randint(int(1e9))
   stable_baselines3.common.utils.set_random_seed(sb3_seed)
 
   # Create a function to instantiate the environment with different seeds
   def create_env():
-    seed = numpy.random.randint(999_999)
+    seed = numpy.random.randint(int(1e9))
     return OneMaxOLL(
       dimensionality=dimensionality,
       seed=seed,
-      actions=config['lambdas'],
       state_type=config['state_type'],
       action_type=config['action_type'],
       reward_type=config['reward_type']
@@ -391,26 +389,26 @@ def main():
   if config['state_type'] == 'SCALAR_ENCODED':
     index_policy = {obs_value: ppo_agent.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0][0] for obs_value in range(dimensionality)}
 
-  lambda_policy = {}
-  for observation, action_index in index_policy.items():
-    lambda_policy[observation] = lambdas[action_index]
+  size_policy = {}
+  for fitness, (mutation_rate, mutation_size_index, crossover_rate, crossover_size_index) in index_policy.items():
+    size_policy[fitness] = (mutation_rate, mutation_sizes[mutation_size_index], crossover_rate, crossover_sizes[crossover_size_index])
 
   with sqlite3.connect(config['db_path']) as database:
     cursor = database.cursor()
     current_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
     cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_total_timesteps, created_at) VALUES (?, ?);', (0, current_time))
     policy_id = cursor.lastrowid
-    policy_data = [(int(policy_id), int(fitness), int(lambda_)) for fitness, lambda_ in lambda_policy.items()]
+    policy_data = [(int(policy_id), int(fitness), int(lambda_)) for fitness, lambda_ in size_policy.items()]
     cursor.executemany('INSERT INTO POLICY_DETAILS (policy_id, fitness, lambda) VALUES (?, ?, ?);', policy_data)
 
-  seed_for_generating_episode_seeds = numpy.random.randint(999_999)
+  seed_for_generating_episode_seeds = numpy.random.randint(int(1e9))
   episode_seed_generator = numpy.random.RandomState(seed_for_generating_episode_seeds)
   num_function_evaluations_list = []
 
   for episode_index in range(num_evaluation_episodes):
-    print(f"Policy: Evaluating episode {episode_index + 1} / {num_evaluation_episodes}.")
-    episode_seed = episode_seed_generator.randint(999_999)
-    num_function_evaluations, num_evaluation_timesteps = evaluate_episode(lambda_policy, episode_seed)
+    print(f"Policy: Evaluating episode {episode_index + 1:,} / {num_evaluation_episodes:,}.")
+    episode_seed = episode_seed_generator.randint(int(1e9))
+    num_function_evaluations, num_evaluation_timesteps = evaluate_episode(size_policy, episode_seed)
     num_function_evaluations_list.append((policy_id, episode_seed, num_evaluation_timesteps, num_function_evaluations))
 
   with sqlite3.connect(config['db_path'], timeout=10) as database:
@@ -420,8 +418,8 @@ def main():
       num_function_evaluations_list
     )
 
-  only_fitness = [int(lambda_) for fitness, lambda_ in lambda_policy.items()]
-  print("lambda_policy", only_fitness)
+  only_fitness = [int(lambda_) for fitness, lambda_ in size_policy.items()]
+  print("size_policy", only_fitness)
   only_fitness = [int(lambda_) for fitness, lambda_ in index_policy.items()]
   print("index_policy", only_fitness)
   # ================== EVALUATION OF FIRST POLICY ==================================================
