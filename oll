@@ -34,7 +34,7 @@ path="$2"
 case $command in
   configure)
     ensure_path "$path" "configure"
-    .deploy/RUN_CONFIG --file "$path"
+    .deploy/RUN_CONFIG "$path"
     ;;
   local)
     ensure_path "$path" "local"
