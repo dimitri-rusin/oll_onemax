@@ -51,6 +51,11 @@ conda activate .deploy/conda_environment/
 # Install Python dependencies from the requirements file
 pip install --requirement .deploy/pip.txt
 
+
+
+# Activate conda environment a second time for easy copying of commands from this file into bash for reinstalling the Rust module:
+conda activate .deploy/conda_environment/
+
 # Check if Cargo is installed. If not install Cargo. Then install maturin.
 if ! command -v $HOME/.cargo/bin/cargo &> /dev/null
 then
