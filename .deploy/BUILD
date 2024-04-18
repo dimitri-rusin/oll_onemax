@@ -3,9 +3,11 @@
 # Exit immediately on errors, treat unset variables as an error, and fail on error in any pipeline
 set -euo pipefail
 
+# Customizing the PS4 variable to show expanded variables
+export PS4='+ \e[36m${BASH_SOURCE}:${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}(): }$ \e[m'
 
-
-# Attempt to initialize Conda in a Bash shell
+# Enable debugging
+set -x
 
 # Find the path to the conda executable
 conda_path=$(which conda)
