@@ -43,7 +43,7 @@ class OneMaxOLL(gymnasium.Env):
       self.action_space = gymnasium.spaces.Box(
         low=config['continuous_actions_high'],
         high=config['continuous_actions_high'],
-        shape=(1,),
+        shape=(222,),
         dtype=numpy.float64,
       )
 
@@ -72,7 +72,7 @@ class OneMaxOLL(gymnasium.Env):
       self.current_solution = DE0CH_OLL.tuned_with_irace.onell_algs.OneMax(
         self.dimensionality,
         rng = self.random_number_generator,
-        ratio_of_optimal_bits = config['probability_of_closeness_to_optimum'],
+        ratio_of_optimal_bits = config['closeness_to_optimum'],
       )
       initial_fitness = self.current_solution.fitness
 
@@ -146,7 +146,7 @@ def evaluate_episode(size_policy, episode_seed):
     policy_list,
     episode_seed,
     int(1e9),
-    config['probability_of_closeness_to_optimum'],
+    config['closeness_to_optimum'],
   )
 
   return num_function_evaluations, num_evaluation_timesteps
@@ -243,7 +243,7 @@ def main():
         FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id)
       );
 
-      CREATE TABLE IF NOT EXISTS EVALUATION_EPISODES (policy_id INTEGER, episode_id INTEGER PRIMARY KEY AUTOINCREMENT, episode_seed INTEGER, num_timesteps INTEGER, num_function_evaluations INTEGER, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
+      CREATE TABLE IF NOT EXISTS EVALUATION_EPISODES (policy_id INTEGER, episode_seed INTEGER, num_timesteps INTEGER, num_function_evaluations INTEGER, FOREIGN KEY(policy_id) REFERENCES POLICY_DETAILS(policy_id));
       CREATE TABLE IF NOT EXISTS CONFIG (key TEXT PRIMARY KEY, value TEXT);
     ''')
 
