@@ -1,4 +1,6 @@
 **/__pycache__/
 .deploy/conda_environment/
 computed/
-config/
+config/*
+!config/.ranges/
+!config/*.py

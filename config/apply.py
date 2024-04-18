@@ -1,7 +1,7 @@
+import argparse
 import os
 import sys
 import yaml
-import argparse
 
 def main():
   parser = argparse.ArgumentParser(description="Path to an experiment settings file.")

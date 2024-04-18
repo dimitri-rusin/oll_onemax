@@ -1,12 +1,12 @@
-import io
 import argparse
+import ast
 import hashlib
+import io
 import itertools
 import os
 import re
 import ruamel.yaml
 import socket
-
 
 def represent_list(dumper, data):
     return dumper.represent_sequence('tag:yaml.org,2002:seq', data, flow_style=True)
@@ -58,17 +58,83 @@ def prune_filenames(filenames):
 
     return pruned_filenames
 
+def safe_eval(expr):
+    """
+    Evaluate an expression more safely but allow certain types of operations like list and range.
+    """
+    # Parse the expression to an AST tree
+    tree = ast.parse(expr, mode='eval')
+
+    # Define allowed nodes
+    allowed_nodes = {
+        ast.Expression, ast.Call, ast.Name, ast.BinOp, ast.List, ast.Constant,
+        ast.UnaryOp, ast.Load, ast.ListComp, ast.comprehension, ast.Compare,
+        ast.Subscript, ast.Slice, ast.Add
+    }
+
+    # Define allowed functions and constructors
+    allowed_names = {
+        'range': range,
+        'list': list
+    }
+
+    # Function to check nodes recursively
+    def check_node(node):
+        if type(node) not in allowed_nodes:
+            raise ValueError(f"Disallowed expression: {ast.dump(node)}")
+        for field, value in ast.iter_fields(node):
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, ast.AST):
+                        check_node(item)
+            elif isinstance(value, ast.AST):
+                check_node(value)
+
+    # Function to evaluate nodes recursively
+    def eval_node(node):
+        if isinstance(node, ast.Expression):
+            return eval_node(node.body)
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            func = allowed_names.get(node.func.id, None)
+            if func:
+                args = [eval_node(arg) for arg in node.args]
+                return func(*args)
+            else:
+                raise ValueError("use of unallowed function: {}".format(node.func.id))
+        elif isinstance(node, ast.Name):
+            if node.id in allowed_names:
+                return allowed_names[node.id]
+            raise ValueError(f"Use of unallowed name: {node.id}")
+        elif isinstance(node, ast.BinOp):
+            left = eval_node(node.left)
+            right = eval_node(node.right)
+            return left + right
+        elif isinstance(node, ast.List):
+            return [eval_node(elt) for elt in node.elts]
+        elif isinstance(node, ast.Num):
+            return node.n
+        else:
+            raise ValueError(f"Unsupported expression: {ast.dump(node)}")
+
+    # Check and evaluate the AST
+    check_node(tree)
+    return eval_node(tree.body)
+
 def expand_config(config):
   expanded_config = {}
   for key, value in config.items():
-    if isinstance(value, dict):
+    if isinstance(value, str):
+      resulting_list = safe_eval(value)
+      assert isinstance(resulting_list, list)
+      expanded_config[key] = resulting_list
+    elif isinstance(value, dict):
       for subkey, subvalue in value.items():
         expanded_config[f'{key}.{subkey}'] = subvalue
     else:
       expanded_config[key] = value
   return expanded_config
 
-def write_config_to_yaml(configs, wordlist):
+def write_config_to_yaml(configs, wordlist, basename_without_suffix):
 
   yaml = ruamel.yaml.YAML()
   yaml.indent(mapping=2, sequence=4, offset=2)
@@ -101,16 +167,14 @@ def write_config_to_yaml(configs, wordlist):
   pruned_filenames = prune_filenames([words for _, words in all_filenames])
 
   is_first_iteration = True
-  for (single_config, _), pruned_filename in zip(all_filenames, pruned_filenames):
+  for (single_config, _), wordhash in zip(all_filenames, pruned_filenames):
     hostname = socket.gethostname()
-    single_config["db_path"] = single_config["db_path"].replace("{wordhash}", pruned_filename)
-    config_path = single_config["db_path"]
-    single_config["db_path"] = single_config["db_path"].replace("{hostname}", hostname)
+    single_config["db_path"] = f"computed/{hostname}/{basename_without_suffix}/{wordhash}.db"
     stream = io.StringIO()
     yaml.dump(single_config, stream)
     yaml_content = stream.getvalue()
 
-    config_path = config_path.replace("{hostname}/", "")
+    config_path = f"config/{basename_without_suffix}/{wordhash}.db"
     config_path = config_path.replace("computed", "config")
     config_path = config_path.replace(".db", ".yaml")
     path_parts = os.path.split(config_path)
@@ -123,10 +187,13 @@ def write_config_to_yaml(configs, wordlist):
     with open(config_path, 'w') as file:
       file.write(yaml_content)
 
-
+  print(f"All configs have now been generated. To see them, run:\nls -al {directory_path}")
 
 if __name__ == '__main__':
-  yaml_file_path = '.deploy/config.yaml'
+  parser = argparse.ArgumentParser(description="Process some YAML.")
+  parser.add_argument('-f', '--file', required=True, help='Path to the YAML file to process')
+  args = parser.parse_args()
+  yaml_file_path = args.file
   yaml = ruamel.yaml.YAML(typ='safe')
   with open(yaml_file_path, 'r') as file:
     configs = yaml.load(file)
@@ -134,4 +201,7 @@ if __name__ == '__main__':
   # Download word list from: https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt
   wordlist = load_wordlist('.deploy/eff_large_wordlist.txt')
 
-  write_config_to_yaml(configs, wordlist)
+  basename = os.path.basename(yaml_file_path)
+  basename_without_suffix = os.path.splitext(basename)[0]
+
+  write_config_to_yaml(configs, wordlist, basename_without_suffix)
