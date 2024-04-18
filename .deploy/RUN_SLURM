@@ -50,7 +50,7 @@ conda activate .deploy/conda_environment
 temp_env_file=$(mktemp /tmp/env.XXXXXX)
 
 # Generate the environment variables and capture them in the temporary file
-python .deploy/apply.py "$yaml_path" > "$temp_env_file"
+python config/apply.py "$yaml_path" > "$temp_env_file"
 
 # Check if the previous command was successful
 if [ $? -ne 0 ]; then

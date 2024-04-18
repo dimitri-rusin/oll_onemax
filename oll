@@ -1,0 +1,57 @@
+#!/bin/bash
+
+usage() {
+  echo "Usage: ./oll <command> [path]"
+  echo "Commands:"
+  echo "  build     - Build conda environment"
+  echo "  configure - Run the configuration script"
+  echo "  local     - Run the local deployment script"
+  echo "  slurm     - Run the SLURM job script"
+  echo "  monitor   - Monitor SLURM jobs (no path required)"
+  echo "Path:"
+  echo "  [path] - Path to the YAML file required by the command, optional for 'monitor'"
+  exit 1
+}
+
+# Function to ensure path is provided for specific commands
+ensure_path() {
+  if [ -z "$1" ]; then
+    echo "Error: Path required for $2."
+    usage
+  fi
+}
+
+# Check if at least one argument is provided
+if [ "$#" -lt 1 ]; then
+  usage
+fi
+
+# Extract command and optionally path from the arguments
+command="$1"
+path="$2"
+
+# Determine which function to call based on the command
+case $command in
+  configure)
+    ensure_path "$path" "configure"
+    .deploy/RUN_CONFIG --file "$path"
+    ;;
+  local)
+    ensure_path "$path" "local"
+    .deploy/RUN_LOCAL "$path"
+    ;;
+  slurm)
+    ensure_path "$path" "slurm"
+    .deploy/RUN_SLURM "$path"
+    ;;
+  monitor)
+    .deploy/RUN_MONITOR
+    ;;
+  build)
+    .deploy/BUILD
+    ;;
+  *)
+    echo "Error: Unknown command '$command'"
+    usage
+    ;;
+esac

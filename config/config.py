@@ -191,7 +191,7 @@ def write_config_to_yaml(configs, wordlist, basename_without_suffix):
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description="Process some YAML.")
-  parser.add_argument('-f', '--file', required=True, help='Path to the YAML file to process')
+  parser.add_argument('file', help='Path to the YAML file to process')
   args = parser.parse_args()
   yaml_file_path = args.file
   yaml = ruamel.yaml.YAML(typ='safe')
