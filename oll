@@ -51,7 +51,8 @@ case $command in
     git checkout .
     ;;
   pull)
-    git pull
+    git checkout main
+    git pull github main
     git submodule update
     ;;
   monitor)
