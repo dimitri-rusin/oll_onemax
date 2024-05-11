@@ -129,7 +129,7 @@ def expand_config(config):
       expanded_config[key] = resulting_list
     elif isinstance(value, dict):
       for subkey, subvalue in value.items():
-        expanded_config[f'{key}.{subkey}'] = subvalue
+        expanded_config[f'{key}__{subkey}'] = subvalue
     else:
       expanded_config[key] = value
   return expanded_config
@@ -146,6 +146,7 @@ def write_config_to_yaml(configs, wordlist, basename_without_suffix):
 
   for config in configs:
     expanded_config = expand_config(config)
+    print(expanded_config)
     keys, values = zip(*expanded_config.items())
 
     for combination in itertools.product(*values):
@@ -153,8 +154,8 @@ def write_config_to_yaml(configs, wordlist, basename_without_suffix):
       nested_config = {}
 
       for key, value in single_config.items():
-        if '.' in key:
-          main_key, sub_key = key.split('.', 1)
+        if '__' in key:
+          main_key, sub_key = key.split('__', 1)
           if main_key not in nested_config:
             nested_config[main_key] = {}
           nested_config[main_key][sub_key] = value
