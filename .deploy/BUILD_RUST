@@ -33,26 +33,6 @@ fi
 
 
 
-# Initialize and update git submodules
-git submodule init
-git submodule update
-
-# Activate the base Conda environment
-conda activate base
-
-# Clean up any previous Conda environment and build targets
-rm -rf .deploy/conda_environment/
-rm -rf DE0CH_OLL/onell_algs_rs/target/
-
-# Create and activate a new Conda environment based on .conda.yaml configuration
-conda env create --prefix .deploy/conda_environment/ --file .deploy/conda.yaml --debug
-conda activate .deploy/conda_environment/
-
-# Install Python dependencies from the requirements file
-pip install --requirement .deploy/pip.txt
-
-
-
 # Activate conda environment a second time for easy copying of commands from this file into bash for reinstalling the Rust module:
 conda activate .deploy/conda_environment/
 
