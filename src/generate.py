@@ -67,23 +67,23 @@ class OneMaxOLL(gymnasium.Env):
     self.num_function_evaluations = 0
     self.random_number_generator = numpy.random.default_rng(self.seed)
 
-    initial_fitness = self.dimensionality
-    while initial_fitness >= self.dimensionality:
-      self.current_solution = DE0CH_OLL.tuned_with_irace.onell_algs.OneMax(
-        self.dimensionality,
-        rng = self.random_number_generator,
-        ratio_of_optimal_bits = config['closeness_to_optimum'],
+    self.current_fitness = self.dimensionality
+    while self.current_fitness >= self.dimensionality:
+      ratio_of_optimal_bits = config['closeness_to_optimum']
+      self.current_bitstring = self.random_number_generator.choice(
+        [True, False],
+        size = self.dimensionality,
+        p = [ratio_of_optimal_bits, 1 - ratio_of_optimal_bits],
       )
-      initial_fitness = self.current_solution.fitness
+      self.current_fitness = self.current_bitstring.sum()
 
-    # there is one evaluation [call to .eval()] inside OneMax
     self.num_function_evaluations += 1
 
     fitness_array = None
     if self.state_type == 'SCALAR_ENCODED':
-      fitness_array = numpy.array([self.current_solution.fitness])
+      fitness_array = numpy.array([self.current_fitness])
     if self.state_type == 'ONE_HOT_ENCODED':
-      fitness_array = create_fitness_vector(self.current_solution.fitness)
+      fitness_array = create_fitness_vector(self.current_fitness)
 
     return fitness_array, {}
 
@@ -94,44 +94,42 @@ class OneMaxOLL(gymnasium.Env):
     crossover_rate = self.crossover_rates[action_index[2]]
     crossover_size = self.crossover_sizes[action_index[3]]
 
-    prior_fitness = self.current_solution.fitness
+    generation_seed = numpy.random.randint(int(1e9))
 
-    xprime, f_xprime, ne1 = self.current_solution.mutate(mutation_rate, mutation_size, self.random_number_generator)
-
-    y, f_y, ne2 = self.current_solution.crossover(
-      xprime,
+    next_bitstring, num_function_evaluations_of_this_step = onell_algs_rs.generation_full_py(
+      self.current_bitstring.tolist(),
+      mutation_rate,
+      mutation_size,
       crossover_rate,
       crossover_size,
-      True,
-      True,
-      self.random_number_generator,
+      generation_seed,
     )
 
-    if f_y >= self.current_solution.fitness:
-      self.current_solution = y
+    prior_fitness = self.current_fitness
 
-    num_evaluations_of_this_step = int(ne1 + ne2)
+    self.current_bitstring = numpy.array(next_bitstring, dtype=bool)
+    self.current_fitness = self.current_bitstring.sum()
 
     assert self.reward_type in ['ONLY_EVALUATIONS', 'EVALUATIONS_PLUS_FITNESS']
     if self.reward_type == 'ONLY_EVALUATIONS':
-      reward = -num_evaluations_of_this_step
+      reward = -num_function_evaluations_of_this_step
     if self.reward_type == 'EVALUATIONS_PLUS_FITNESS':
-      reward = -num_evaluations_of_this_step + (self.current_solution.fitness - prior_fitness)
+      reward = -num_function_evaluations_of_this_step + (self.current_fitness - prior_fitness)
 
-    terminated = self.current_solution.is_optimal()
+    terminated = (self.current_fitness == self.dimensionality)
     info = {}
 
-    self.num_function_evaluations += num_evaluations_of_this_step
-    self.num_total_function_evaluations += num_evaluations_of_this_step
+    self.num_function_evaluations += num_function_evaluations_of_this_step
+    self.num_total_function_evaluations += num_function_evaluations_of_this_step
     self.num_total_timesteps += 1
 
     truncated = False
 
     fitness_array = None
     if self.state_type == 'SCALAR_ENCODED':
-      fitness_array = numpy.array([self.current_solution.fitness])
+      fitness_array = numpy.array([self.current_fitness])
     if self.state_type == 'ONE_HOT_ENCODED':
-      fitness_array = create_fitness_vector(self.current_solution.fitness)
+      fitness_array = create_fitness_vector(self.current_fitness)
 
     return fitness_array, reward, terminated, truncated, info
 
