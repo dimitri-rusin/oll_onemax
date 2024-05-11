@@ -8,6 +8,8 @@ usage() {
   echo "  local     - Run the local deployment script"
   echo "  slurm     - Run the SLURM job script"
   echo "  monitor   - Monitor SLURM jobs (no path required)"
+  echo "  clean     - Deletes all slurm-*.out files and changes all files to correspond to a git commit."
+  echo "  pull      - Fetches git changes, and reconfigures git submodules."
   echo "Path:"
   echo "  [path] - Path to the YAML file required by the command, optional for 'monitor'"
   exit 1
@@ -43,6 +45,14 @@ case $command in
   slurm)
     ensure_path "$path" "slurm"
     .deploy/RUN_SLURM "$path"
+    ;;
+  clean)
+    rm -rf slurm-*.out
+    git checkout .
+    ;;
+  pull)
+    git pull
+    git submodule update
     ;;
   monitor)
     .deploy/RUN_MONITOR
