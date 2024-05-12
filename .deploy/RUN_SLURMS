@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+# Exit immediately on errors, treat unset variables as an error, and fail on error in any pipeline
+set -euo pipefail
+
+# Customizing the PS4 variable to show expanded variables
+export PS4='+ \e[36m${BASH_SOURCE}:${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}(): }$ \e[m'
+
+# Enable debugging if the last argument is --verbose
+if [[ "${@: -1}" == "--verbose" ]]; then
+  set -x
+  set -- "${@:1:$(($#-1))}"  # Remove the last argument (--verbose)
+fi
+
+config_folder_path="$1"
+
+find config/$config_folder_path/ -name '*.yaml' -print0 | xargs -0 -I {} .deploy/RUN_SLURM {}
