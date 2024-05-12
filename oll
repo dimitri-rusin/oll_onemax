@@ -31,20 +31,21 @@ fi
 # Extract command and optionally path from the arguments
 command="$1"
 path="$2"
+verbose="$3"
 
 # Determine which function to call based on the command
 case $command in
   configure)
     ensure_path "$path" "configure"
-    .deploy/RUN_CONFIG "$path"
+    .deploy/RUN_CONFIG "$path" "$verbose"
     ;;
   local)
     ensure_path "$path" "local"
-    .deploy/RUN_LOCAL "$path"
+    .deploy/RUN_LOCAL "$path" "$verbose"
     ;;
   slurm)
     ensure_path "$path" "slurm"
-    .deploy/RUN_SLURM "$path"
+    .deploy/RUN_SLURM "$path" "$verbose"
     ;;
   clean)
     rm -rf slurm-*.out

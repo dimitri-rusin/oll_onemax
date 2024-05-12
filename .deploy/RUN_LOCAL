@@ -6,8 +6,11 @@ set -euo pipefail
 # Customizing the PS4 variable to show expanded variables
 export PS4='+ \e[36m${BASH_SOURCE}:${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}(): }$ \e[m'
 
-# Enable debugging
-set -x
+# Enable debugging if the last argument is --verbose
+if [[ "${@: -1}" == "--verbose" ]]; then
+  set -x
+  set -- "${@:1:$(($#-1))}"  # Remove the last argument (--verbose)
+fi
 
 if [ "$(whoami)" = "dimitri_rusin" ]; then
   module load anaconda3/2023.09
@@ -37,7 +40,7 @@ else
 fi
 
 # Check for the YAML file path argument
-if [ "$#" -ne 1 ]; then
+if [ "$#" -lt 1 ]; then
   echo "Usage: $0 <yaml_path>"
   exit 1
 fi
