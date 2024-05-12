@@ -84,10 +84,20 @@ class OneMaxOLL(gymnasium.Env):
 
   def step(self, action_index):
 
-    mutation_rate = self.mutation_rates[action_index[0]]
-    mutation_size = self.mutation_sizes[action_index[1]]
-    crossover_rate = self.crossover_rates[action_index[2]]
-    crossover_size = self.crossover_sizes[action_index[3]]
+    if 'lambdas' in config:
+      # action_index is of type: <class 'numpy.int64'>
+      lambda_ = self.lambdas[action_index]
+      mutation_rate = numpy.float64(lambda_ / self.dimensionality)
+      mutation_size = numpy.int64(lambda_)
+      crossover_rate = numpy.float64(1.0 / lambda_)
+      crossover_size = numpy.int64(lambda_)
+
+    if 'mutation_rates' in config:
+      # action_index is of type: <class 'numpy.ndarray'> (with 4 elements)
+      mutation_rate = self.mutation_rates[action_index[0]]
+      mutation_size = self.mutation_sizes[action_index[1]]
+      crossover_rate = self.crossover_rates[action_index[2]]
+      crossover_size = self.crossover_sizes[action_index[3]]
 
     generation_seed = numpy.random.randint(int(1e9))
 
@@ -132,11 +142,11 @@ class OneMaxOLL(gymnasium.Env):
 
 def evaluate_episode(size_policy, episode_seed):
 
-  policy_list = [parameter_tuple for _, parameter_tuple in size_policy.items()]
+  oll_parameters = [parameter_tuple for _, parameter_tuple in size_policy.items()]
   dimensionality = len(size_policy)
   num_function_evaluations, num_evaluation_timesteps = onell_algs_rs.onell_lambda(
     dimensionality,
-    policy_list,
+    oll_parameters,
     episode_seed,
     int(1e9),
     config['closeness_to_optimum'],
@@ -216,6 +226,7 @@ def evaluate_policy(
   crossover_sizes,
   db_path,
   dimensionality,
+  lambdas,
   mutation_rates,
   mutation_sizes,
   num_evaluation_episodes,
@@ -229,8 +240,17 @@ def evaluate_policy(
     index_policy = {int(obs_value): ppo_agent.predict(numpy.array([obs_value]).reshape((1, 1)), deterministic=True)[0].tolist() for obs_value in range(dimensionality)}
 
   size_policy = {}
-  for fitness, (mutation_rate_index, mutation_size_index, crossover_rate_index, crossover_size_index) in index_policy.items():
-    size_policy[fitness] = (mutation_rates[mutation_rate_index], int(mutation_sizes[mutation_size_index]), crossover_rates[crossover_rate_index], int(crossover_sizes[crossover_size_index]))
+
+  if 'lambdas' in config:
+    for fitness, lambda_index in index_policy.items():
+      lambda_ = lambdas[lambda_index]
+      mutation_rate = lambda_ / dimensionality
+      crossover_rate = 1.0 / lambda_
+      size_policy[fitness] = (numpy.float64(mutation_rate), numpy.int64(lambda_), numpy.float64(crossover_rate), numpy.int64(lambda_))
+
+  if 'mutation_rates' in config:
+    for fitness, (mutation_rate_index, mutation_size_index, crossover_rate_index, crossover_size_index) in index_policy.items():
+      size_policy[fitness] = (mutation_rates[mutation_rate_index], int(mutation_sizes[mutation_size_index]), crossover_rates[crossover_rate_index], int(crossover_sizes[crossover_size_index]))
 
   with sqlite3.connect(db_path) as database:
     cursor = database.cursor()
@@ -350,10 +370,22 @@ def main():
       )
 
   # hier nach lambda versus mutation_rates unterscheiden
-  mutation_rates = numpy.array(config['mutation_rates'], dtype = numpy.float64)
-  mutation_sizes = numpy.array(config['mutation_sizes'], dtype = numpy.int64)
-  crossover_rates = numpy.array(config['crossover_rates'], dtype = numpy.float64)
-  crossover_sizes = numpy.array(config['crossover_sizes'], dtype = numpy.int64)
+  lambdas = None
+  mutation_rates = None
+  mutation_sizes = None
+  crossover_rates = None
+  crossover_sizes = None
+
+  assert 'lambdas' in config or 'mutation_rates' in config
+
+  if 'lambdas' in config:
+    lambdas = numpy.array(config['lambdas'], dtype = numpy.float64)
+
+  if 'mutation_rates' in config:
+    mutation_rates = numpy.array(config['mutation_rates'], dtype = numpy.float64)
+    mutation_sizes = numpy.array(config['mutation_sizes'], dtype = numpy.int64)
+    crossover_rates = numpy.array(config['crossover_rates'], dtype = numpy.float64)
+    crossover_sizes = numpy.array(config['crossover_sizes'], dtype = numpy.int64)
 
   class PPOCallback(stable_baselines3.common.callbacks.BaseCallback):
     def __init__(self, verbose=0):
@@ -370,6 +402,7 @@ def main():
         crossover_sizes = crossover_sizes,
         db_path = config['db_path'],
         dimensionality = dimensionality,
+        lambdas = lambdas,
         mutation_rates = mutation_rates,
         mutation_sizes = mutation_sizes,
         num_evaluation_episodes = num_evaluation_episodes,
@@ -417,6 +450,7 @@ def main():
     crossover_sizes = crossover_sizes,
     db_path = config['db_path'],
     dimensionality = dimensionality,
+    lambdas = lambdas,
     mutation_rates = mutation_rates,
     mutation_sizes = mutation_sizes,
     num_evaluation_episodes = num_evaluation_episodes,
