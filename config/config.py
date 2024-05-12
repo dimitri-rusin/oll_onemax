@@ -146,7 +146,6 @@ def write_config_to_yaml(configs, wordlist, basename_without_suffix):
 
   for config in configs:
     expanded_config = expand_config(config)
-    print(expanded_config)
     keys, values = zip(*expanded_config.items())
 
     for combination in itertools.product(*values):
