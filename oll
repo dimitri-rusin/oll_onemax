@@ -52,6 +52,7 @@ case $command in
     git checkout .
     ;;
   pull)
+    # git remote rename origin github
     git checkout main
     git pull github main
     git submodule update
@@ -60,7 +61,8 @@ case $command in
     .deploy/RUN_MONITOR
     ;;
   build)
-    .deploy/BUILD
+    .deploy/BUILD_PYTHON
+    .deploy/BUILD_RUST
     ;;
   *)
     echo "Error: Unknown command '$command'"
