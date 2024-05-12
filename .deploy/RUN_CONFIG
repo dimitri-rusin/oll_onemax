@@ -32,6 +32,7 @@ fi
 
 # Source conda.sh if it exists, else export PATH
 if [ -f "$conda_sh_path" ]; then
+  echo "Sourcing: $conda_sh_path"
   source "$conda_sh_path"
 else
   export PATH="${conda_path%/bin/conda}/bin:$PATH"
@@ -39,4 +40,4 @@ fi
 
 conda activate .deploy/conda_environment
 
-python config/config.py "${@}"
+python config/config.py "$1"
