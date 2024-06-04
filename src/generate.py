@@ -1,8 +1,8 @@
-from ConfigSpace import Configuration, ConfigurationSpace, CategoricalHyperparameter, Constant
 from sklearn import datasets
 from sklearn.model_selection import cross_val_score
 from sklearn.svm import SVC
 from smac import HyperparameterOptimizationFacade, Scenario
+import ConfigSpace
 import datetime
 import gymnasium
 import inspectify
@@ -163,9 +163,9 @@ def create_fitness_vector(fitness, dimensionality):
     fitness_vector[fitness] = 1
   return fitness_vector
 
-def load_config():
+def load_config(environment_variables = os.environ):
   config = {}
-  for key, value in os.environ.items():
+  for key, value in environment_variables.items():
     if key.startswith("OO__"):
       # Remove 'OO__' prefix and convert to lowercase
       key = key[4:].lower()
@@ -174,7 +174,9 @@ def load_config():
       key_parts = key.split('__')
 
       # Check for list-like structure and parse accordingly
-      if value.startswith("[") and value.endswith("]"):
+      if type(value) in [int, float]:
+        parsed_value = value
+      elif value.startswith("[") and value.endswith("]"):
         value = value[1:-1]  # Remove the brackets
         parsed_value = []
         for item in value.split(','):
@@ -276,6 +278,7 @@ def evaluate_policy(
     )
 
   # Calculate averages of num_function_evaluations and num_evaluation_timesteps
+  assert len(num_function_evaluations_list) > 0
   total_function_evaluations = sum(num_evals for _, _, _, num_evals in num_function_evaluations_list)
   total_evaluation_timesteps = sum(num_timesteps for _, _, num_timesteps, _ in num_function_evaluations_list)
   average_function_evaluations = total_function_evaluations / len(num_function_evaluations_list)
@@ -285,32 +288,13 @@ def evaluate_policy(
 
 
 
+def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration, seed: int = 0):
 
+  # Get Python dictionary out of the ConfigSpace object.
+  environment_variables = ConfigSpace__configuration.get_dictionary()
 
-
-
-
-
-# Function to evaluate list expressions in the configuration dictionary
-def evaluate_lists_in_config(config):
-  for key, value in config.items():
-    if isinstance(value, str) and value.startswith("list([") and value.endswith("])"):
-      print(config[key])
-      print(value)
-      config[key] = eval(value[5:-1])
-      print(config[key])
-    elif isinstance(value, dict):
-      return evaluate_lists_in_config(value)
-  return config
-
-def train_oll_based_seeker(config, seed):
-
-  d = open("err", "a")
-  print("erste", file = d)
-  print(config, file = d)
-  config = evaluate_lists_in_config(config)
-  print("zwete", file = d)
-  print(config, file = d)
+  # Load config as if from the OS environment.
+  config = load_config(environment_variables)
 
   mersenne_twister = numpy.random.MT19937(seed)
   main_generator = numpy.random.Generator(mersenne_twister)
@@ -485,51 +469,40 @@ def train_oll_based_seeker(config, seed):
   callback = PPOCallback()
   ppo_agent.learn(total_timesteps=config['max_training_timesteps'], callback=callback)
 
-  print(callback.average_function_evaluations)
   return callback.average_function_evaluations
 
 
 
 if __name__ == '__main__':
-
-
-
-  # Define the configuration space with fixed values
-  cs = ConfigurationSpace()
-
+  cs = ConfigSpace.ConfigurationSpace()
   cs.add_hyperparameters([
-      Constant("slurm.cpus_per_task", 1),
-      Constant("slurm.partition", "standard"),
-      Constant("slurm.time", "07:00:00"),
-      Constant("slurm.ntasks_per_node", 1),
-      Constant("slurm.nodes", 1),
-      Constant("slurm.account", "sc122-dimitri"),
-      Constant("slurm.qos", "standard"),
-      Constant("mutation_rates", [0.0625, 0.075, 0.0875, 0.1]),
-      Constant("num_environments", 4),
-      Constant("max_training_timesteps", 500000),
-      Constant("ppo.batch_size", 100),
-      Constant("ppo.n_epochs", 10),
-      Constant("ppo.clip_range", 0.2),
-      Constant("ppo.policy", "MlpPolicy"),
-      Constant("ppo.gamma", 1),
-      Constant("ppo.n_steps", 2000),
-      Constant("ppo.gae_lambda", 0.95),
-      Constant("ppo.vf_coef", 0.5),
-      Constant("ppo.learning_rate", 0.0003),
-      Constant("ppo.net_arch", [50, 50]),
-      Constant("ppo.ent_coef", 0.0),
-      Constant("dimensionality", 80),
-      Constant("num_timesteps_per_evaluation", 4000),
-      Constant("mutation_sizes", [2, 4, 6, 7, 8]),
-      Constant("crossover_rates", [0.2, 0.16666666666666666, 0.14285714285714285, 0.125]),
-      Constant("db_path", "computed/sunshine/four_one_specific/abnormal.db"),
-      Constant("random_seed", 18),
-      Constant("action_type", "DISCRETE"),
-      Constant("crossover_sizes", [5, 6, 7, 8]),
-      Constant("closeness_to_optimum", 0.7),
-      Constant("num_evaluation_episodes", 1000),
-      Constant("state_type", "ONE_HOT_ENCODED"),
-      Constant("reward_type", "EVALUATIONS_PLUS_FITNESS")
+    ConfigSpace.CategoricalHyperparameter("OO__MUTATION_RATES", ["[0.0625, 0.075, 0.0875, 0.1, 0.2, 0.3, 0.4, 0.8]"]),
+    ConfigSpace.CategoricalHyperparameter("OO__NUM_ENVIRONMENTS", [1]),
+    ConfigSpace.CategoricalHyperparameter("OO__MAX_TRAINING_TIMESTEPS", [1000]),
+    ConfigSpace.CategoricalHyperparameter("OO__PPO__BATCH_SIZE", [100]),
+    ConfigSpace.CategoricalHyperparameter("OO__DIMENSIONALITY", [80]),
+    ConfigSpace.CategoricalHyperparameter("OO__NUM_TIMESTEPS_PER_EVALUATION", [400]),
+    ConfigSpace.CategoricalHyperparameter("OO__PPO__N_EPOCHS", [10]),
+    ConfigSpace.CategoricalHyperparameter("OO__PPO__CLIP_RANGE", [0.2]),
+    ConfigSpace.CategoricalHyperparameter("OO__PPO__POLICY", ["MlpPolicy"]),
+    ConfigSpace.CategoricalHyperparameter("OO__MUTATION_SIZES", ["[5, 6, 7, 8]"]),
+    ConfigSpace.UniformFloatHyperparameter("OO__PPO__GAMMA", 0.0, 1.0),
+    ConfigSpace.CategoricalHyperparameter("OO__CROSSOVER_RATES", ["[0.2, 0.1667, 0.1429, 0.125]"]),
+    ConfigSpace.CategoricalHyperparameter("OO__DB_PATH", ["computed/sunshine/action_sets/abrasion.db"]),
+    ConfigSpace.CategoricalHyperparameter("OO__PPO__N_STEPS", [2000]),
+    ConfigSpace.CategoricalHyperparameter("OO__PPO__GAE_LAMBDA", [0.95]),
+    ConfigSpace.CategoricalHyperparameter("OO__PPO__VF_COEF", [0.5]),
+    ConfigSpace.CategoricalHyperparameter("OO__ACTION_TYPE", ["DISCRETE"]),
+    ConfigSpace.CategoricalHyperparameter("OO__PPO__LEARNING_RATE", [0.0003]),
+    ConfigSpace.CategoricalHyperparameter("OO__CROSSOVER_SIZES", ["[1, 2, 3, 4, 5, 6, 7, 8]"]),
+    ConfigSpace.CategoricalHyperparameter("OO__PPO__NET_ARCH", ["[50, 50]"]),
+    ConfigSpace.CategoricalHyperparameter("OO__CLOSENESS_TO_OPTIMUM", [0.8]),
+    ConfigSpace.CategoricalHyperparameter("OO__NUM_EVALUATION_EPISODES", [150]),
+    ConfigSpace.CategoricalHyperparameter("OO__STATE_TYPE", ["ONE_HOT_ENCODED"]),
+    ConfigSpace.CategoricalHyperparameter("OO__PPO__ENT_COEF", [0.0]),
+    ConfigSpace.CategoricalHyperparameter("OO__REWARD_TYPE", ["EVALUATIONS_PLUS_FITNESS"]),
   ])
-
+  scenario = Scenario(configspace=cs, deterministic=False, n_trials=200)
+  smac = HyperparameterOptimizationFacade(scenario = scenario, target_function = train_oll_based_seeker)
+  incumbent = smac.optimize()
+  print("Best configuration:", incumbent)
