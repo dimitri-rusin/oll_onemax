@@ -2,12 +2,12 @@
 colored==2.2.3
 dash==2.16.1
 gymnasium==0.29.1
-gymnasium[classic-control]==0.29.1
+gymnasium[classic-control]
 inspectify==0.0.2
 jupyter==1.0.0
-maturin===0.13.7
+maturin==0.13.7
 numpy==1.24.2
-opencv-python
+opencv-python==4.9.0.80
 plotly==5.18.0
 ruamel.yaml==0.18.6
 scikit-learn==1.2.2

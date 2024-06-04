@@ -31,6 +31,8 @@ fi
 # Extract command and optionally path from the arguments
 command="$1"
 path="$2"
+
+# This could be: --verbose
 verbose="$3"
 
 # Determine which function to call based on the command
