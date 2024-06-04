@@ -1,6 +1,12 @@
+from ConfigSpace import Configuration, ConfigurationSpace, CategoricalHyperparameter, Constant
+from sklearn import datasets
+from sklearn.model_selection import cross_val_score
+from sklearn.svm import SVC
+from smac import HyperparameterOptimizationFacade, Scenario
 import datetime
 import gymnasium
 import inspectify
+import numpy
 import numpy
 import onell_algs_rs
 import os
@@ -18,9 +24,9 @@ import DE0CH_OLL.tuned_with_irace.onell_algs
 # ============== ENVIRONMENT - BEGIN ==============
 
 class OneMaxOLL(gymnasium.Env):
-  def __init__(self, dimensionality, seed, reward_type, action_type, state_type, config):
+  def __init__(self, seed, config):
     super(OneMaxOLL, self).__init__()
-    self.dimensionality = dimensionality
+    self.dimensionality = config['dimensionality']
     self.config = config
 
     if 'lambdas' in self.config:
@@ -39,30 +45,30 @@ class OneMaxOLL(gymnasium.Env):
         self.crossover_sizes.shape[0],
       ])
 
-    if state_type == 'SCALAR_ENCODED':
-      self.observation_space = gymnasium.spaces.Box(low=0, high=dimensionality - 1, shape=(1,), dtype=numpy.int32)
-    if state_type == 'ONE_HOT_ENCODED':
-      self.observation_space = gymnasium.spaces.Box(low=0, high=1, shape=(dimensionality,), dtype=numpy.int32)
-    self.state_type = state_type
+    self.state_type = config['state_type']
+    if self.state_type == 'SCALAR_ENCODED':
+      self.observation_space = gymnasium.spaces.Box(low=0, high=self.dimensionality - 1, shape=(1,), dtype=numpy.int32)
+    if self.state_type == 'ONE_HOT_ENCODED':
+      self.observation_space = gymnasium.spaces.Box(low=0, high=1, shape=(self.dimensionality,), dtype=numpy.int32)
 
     self.seed = seed
-    self.random_number_generator = numpy.random.Generator(numpy.random.MT19937(self.seed))
+    self.onemaxoll_generator = numpy.random.Generator(numpy.random.MT19937(self.seed))
     self.current_solution = None
     self.num_function_evaluations = None
     self.num_total_timesteps = 0
     self.num_total_function_evaluations = 0
-    self.reward_type = reward_type
+    self.reward_type = config['reward_type']
 
   def reset(self, seed = None):
     if seed is not None:
       self.seed = seed
     self.num_function_evaluations = 0
-    self.random_number_generator = numpy.random.Generator(numpy.random.MT19937(self.seed))
+    self.onemaxoll_generator = numpy.random.Generator(numpy.random.MT19937(self.seed))
 
     self.current_fitness = self.dimensionality
     while self.current_fitness >= self.dimensionality:
       ratio_of_optimal_bits = self.config['closeness_to_optimum']
-      self.current_bitstring = self.random_number_generator.choice(
+      self.current_bitstring = self.onemaxoll_generator.choice(
         [True, False],
         size = self.dimensionality,
         p = [ratio_of_optimal_bits, 1 - ratio_of_optimal_bits],
@@ -96,7 +102,7 @@ class OneMaxOLL(gymnasium.Env):
       crossover_rate = self.crossover_rates[action_index[2]]
       crossover_size = self.crossover_sizes[action_index[3]]
 
-    generation_seed = self.random_number_generator.integers(int(1e9))
+    generation_seed = self.onemaxoll_generator.integers(int(1e9))
 
     next_bitstring, num_function_evaluations_of_this_step = onell_algs_rs.generation_full_py(
       self.current_bitstring.tolist(),
@@ -269,6 +275,13 @@ def evaluate_policy(
       num_function_evaluations_list
     )
 
+  # Calculate averages of num_function_evaluations and num_evaluation_timesteps
+  total_function_evaluations = sum(num_evals for _, _, _, num_evals in num_function_evaluations_list)
+  total_evaluation_timesteps = sum(num_timesteps for _, _, num_timesteps, _ in num_function_evaluations_list)
+  average_function_evaluations = total_function_evaluations / len(num_function_evaluations_list)
+  average_evaluation_timesteps = total_evaluation_timesteps / len(num_function_evaluations_list)
+
+  return average_function_evaluations, average_evaluation_timesteps
 
 
 
@@ -278,16 +291,28 @@ def evaluate_policy(
 
 
 
+# Function to evaluate list expressions in the configuration dictionary
+def evaluate_lists_in_config(config):
+  for key, value in config.items():
+    if isinstance(value, str) and value.startswith("list([") and value.endswith("])"):
+      print(config[key])
+      print(value)
+      config[key] = eval(value[5:-1])
+      print(config[key])
+    elif isinstance(value, dict):
+      return evaluate_lists_in_config(value)
+  return config
 
+def train_oll_based_seeker(config, seed):
 
+  d = open("err", "a")
+  print("erste", file = d)
+  print(config, file = d)
+  config = evaluate_lists_in_config(config)
+  print("zwete", file = d)
+  print(config, file = d)
 
-
-
-def main():
-  config = load_config()
-
-  main_generator_seed = config['random_seed']
-  mersenne_twister = numpy.random.MT19937(main_generator_seed)
+  mersenne_twister = numpy.random.MT19937(seed)
   main_generator = numpy.random.Generator(mersenne_twister)
 
   if os.path.isfile(config['db_path']):
@@ -365,7 +390,6 @@ def main():
         episode_data
       )
 
-  # hier nach lambda versus mutation_rates unterscheiden
   lambdas = None
   mutation_rates = None
   mutation_sizes = None
@@ -387,13 +411,15 @@ def main():
     def __init__(self, verbose=0):
       super(PPOCallback, self).__init__(verbose)
       self.evaluation_results = []
+      self.average_function_evaluations = None
+      self.average_evaluation_timesteps = None
 
     def _on_step(self):
 
       # self.num_timesteps is the number of timesteps made across all environments, for each environment we have made n_steps steps.
       if self.num_timesteps % config['num_timesteps_per_evaluation'] != 0: return True
 
-      evaluate_policy(
+      self.average_function_evaluations, self.average_evaluation_timesteps = evaluate_policy(
         crossover_rates = crossover_rates,
         crossover_sizes = crossover_sizes,
         db_path = config['db_path'],
@@ -418,11 +444,7 @@ def main():
   def create_env():
     seed = main_generator.integers(int(1e9))
     return OneMaxOLL(
-      dimensionality = dimensionality,
       seed = seed,
-      state_type = config['state_type'],
-      action_type = config['action_type'],
-      reward_type = config['reward_type'],
       config = config,
     )
 
@@ -460,7 +482,54 @@ def main():
     episode_seed_generator = main_generator,
   )
 
-  ppo_agent.learn(total_timesteps=config['max_training_timesteps'], callback=PPOCallback())
+  callback = PPOCallback()
+  ppo_agent.learn(total_timesteps=config['max_training_timesteps'], callback=callback)
+
+  print(callback.average_function_evaluations)
+  return callback.average_function_evaluations
+
+
 
 if __name__ == '__main__':
-  main()
+
+
+
+  # Define the configuration space with fixed values
+  cs = ConfigurationSpace()
+
+  cs.add_hyperparameters([
+      Constant("slurm.cpus_per_task", 1),
+      Constant("slurm.partition", "standard"),
+      Constant("slurm.time", "07:00:00"),
+      Constant("slurm.ntasks_per_node", 1),
+      Constant("slurm.nodes", 1),
+      Constant("slurm.account", "sc122-dimitri"),
+      Constant("slurm.qos", "standard"),
+      Constant("mutation_rates", [0.0625, 0.075, 0.0875, 0.1]),
+      Constant("num_environments", 4),
+      Constant("max_training_timesteps", 500000),
+      Constant("ppo.batch_size", 100),
+      Constant("ppo.n_epochs", 10),
+      Constant("ppo.clip_range", 0.2),
+      Constant("ppo.policy", "MlpPolicy"),
+      Constant("ppo.gamma", 1),
+      Constant("ppo.n_steps", 2000),
+      Constant("ppo.gae_lambda", 0.95),
+      Constant("ppo.vf_coef", 0.5),
+      Constant("ppo.learning_rate", 0.0003),
+      Constant("ppo.net_arch", [50, 50]),
+      Constant("ppo.ent_coef", 0.0),
+      Constant("dimensionality", 80),
+      Constant("num_timesteps_per_evaluation", 4000),
+      Constant("mutation_sizes", [2, 4, 6, 7, 8]),
+      Constant("crossover_rates", [0.2, 0.16666666666666666, 0.14285714285714285, 0.125]),
+      Constant("db_path", "computed/sunshine/four_one_specific/abnormal.db"),
+      Constant("random_seed", 18),
+      Constant("action_type", "DISCRETE"),
+      Constant("crossover_sizes", [5, 6, 7, 8]),
+      Constant("closeness_to_optimum", 0.7),
+      Constant("num_evaluation_episodes", 1000),
+      Constant("state_type", "ONE_HOT_ENCODED"),
+      Constant("reward_type", "EVALUATIONS_PLUS_FITNESS")
+  ])
+
