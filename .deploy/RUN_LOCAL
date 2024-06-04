@@ -47,7 +47,11 @@ fi
 
 yaml_path="$1"
 
+# The set envelopment comes from an issue where the Anaconda3 access unset variables. We disable the shell policy to stop
+# script execution, when an unset variable is accessed. More info: https://github.com/conda/conda/issues/3200
+set +u
 conda activate .deploy/conda_environment
+set -u
 
 # Generate a temporary file in /tmp
 temp_env_file=$(mktemp /tmp/env.XXXXXX)
