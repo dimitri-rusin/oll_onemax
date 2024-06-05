@@ -4,6 +4,15 @@
 
 
 
+# Check limits
+```sh
+sacctmgr list user $USER withassoc
+```
+
+
+
+
+
 
 
 
