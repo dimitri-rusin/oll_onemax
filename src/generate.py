@@ -7,7 +7,6 @@ import datetime
 import gymnasium
 import inspectify
 import numpy
-import numpy
 import onell_algs_rs
 import os
 import sqlite3
@@ -469,6 +468,7 @@ def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration
   callback = PPOCallback()
   ppo_agent.learn(total_timesteps=config['max_training_timesteps'], callback=callback)
 
+  # area under the curve: sum over all timesteps, sum the differences between actual policy and theoretical policy
   return callback.average_function_evaluations
 
 
@@ -476,31 +476,30 @@ def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration
 if __name__ == '__main__':
   cs = ConfigSpace.ConfigurationSpace()
   cs.add_hyperparameters([
-    ConfigSpace.CategoricalHyperparameter("OO__MUTATION_RATES", ["[0.0625, 0.075, 0.0875, 0.1, 0.2, 0.3, 0.4, 0.8]"]),
-    ConfigSpace.CategoricalHyperparameter("OO__NUM_ENVIRONMENTS", [1]),
-    ConfigSpace.CategoricalHyperparameter("OO__MAX_TRAINING_TIMESTEPS", [1000]),
-    ConfigSpace.CategoricalHyperparameter("OO__PPO__BATCH_SIZE", [100]),
-    ConfigSpace.CategoricalHyperparameter("OO__DIMENSIONALITY", [80]),
-    ConfigSpace.CategoricalHyperparameter("OO__NUM_TIMESTEPS_PER_EVALUATION", [400]),
-    ConfigSpace.CategoricalHyperparameter("OO__PPO__N_EPOCHS", [10]),
-    ConfigSpace.CategoricalHyperparameter("OO__PPO__CLIP_RANGE", [0.2]),
-    ConfigSpace.CategoricalHyperparameter("OO__PPO__POLICY", ["MlpPolicy"]),
-    ConfigSpace.CategoricalHyperparameter("OO__MUTATION_SIZES", ["[5, 6, 7, 8]"]),
-    ConfigSpace.UniformFloatHyperparameter("OO__PPO__GAMMA", 0.0, 1.0),
-    ConfigSpace.CategoricalHyperparameter("OO__CROSSOVER_RATES", ["[0.2, 0.1667, 0.1429, 0.125]"]),
-    ConfigSpace.CategoricalHyperparameter("OO__DB_PATH", ["computed/sunshine/action_sets/abrasion.db"]),
-    ConfigSpace.CategoricalHyperparameter("OO__PPO__N_STEPS", [2000]),
-    ConfigSpace.CategoricalHyperparameter("OO__PPO__GAE_LAMBDA", [0.95]),
-    ConfigSpace.CategoricalHyperparameter("OO__PPO__VF_COEF", [0.5]),
-    ConfigSpace.CategoricalHyperparameter("OO__ACTION_TYPE", ["DISCRETE"]),
-    ConfigSpace.CategoricalHyperparameter("OO__PPO__LEARNING_RATE", [0.0003]),
-    ConfigSpace.CategoricalHyperparameter("OO__CROSSOVER_SIZES", ["[1, 2, 3, 4, 5, 6, 7, 8]"]),
-    ConfigSpace.CategoricalHyperparameter("OO__PPO__NET_ARCH", ["[50, 50]"]),
-    ConfigSpace.CategoricalHyperparameter("OO__CLOSENESS_TO_OPTIMUM", [0.8]),
-    ConfigSpace.CategoricalHyperparameter("OO__NUM_EVALUATION_EPISODES", [150]),
-    ConfigSpace.CategoricalHyperparameter("OO__STATE_TYPE", ["ONE_HOT_ENCODED"]),
-    ConfigSpace.CategoricalHyperparameter("OO__PPO__ENT_COEF", [0.0]),
-    ConfigSpace.CategoricalHyperparameter("OO__REWARD_TYPE", ["EVALUATIONS_PLUS_FITNESS"]),
+    ConfigSpace.Constant("OO__ACTION_TYPE", "DISCRETE"),
+    ConfigSpace.Constant("OO__CLOSENESS_TO_OPTIMUM", 0.8),
+    ConfigSpace.Constant("OO__DB_PATH", "computed/sunshine/action_sets/abrasion.db"),
+    ConfigSpace.Constant("OO__DIMENSIONALITY", 80),
+    ConfigSpace.Constant("OO__LAMBDAS", "[2, 4, 6, 7, 8]"),
+    ConfigSpace.Constant("OO__MAX_TRAINING_TIMESTEPS", 2_000_000),
+    ConfigSpace.Constant("OO__NUM_ENVIRONMENTS", 1),
+    ConfigSpace.Constant("OO__NUM_EVALUATION_EPISODES", 150),
+    ConfigSpace.Constant("OO__NUM_TIMESTEPS_PER_EVALUATION", 400),
+    ConfigSpace.Constant("OO__REWARD_TYPE", "EVALUATIONS_PLUS_FITNESS"),
+    ConfigSpace.Constant("OO__STATE_TYPE", "ONE_HOT_ENCODED"),
+
+    ConfigSpace.Constant("OO__PPO__BATCH_SIZE", 100),
+    ConfigSpace.Constant("OO__PPO__ENT_COEF", 0.0),
+    ConfigSpace.Constant("OO__PPO__LEARNING_RATE", 0.0003),
+    ConfigSpace.Constant("OO__PPO__N_EPOCHS", 10),
+    ConfigSpace.Constant("OO__PPO__N_STEPS", 2000),
+    ConfigSpace.Constant("OO__PPO__NET_ARCH", "[50, 50]"),
+    ConfigSpace.Constant("OO__PPO__POLICY", "MlpPolicy"),
+    ConfigSpace.Constant("OO__PPO__VF_COEF", 0.5),
+
+    ConfigSpace.UniformFloatHyperparameter("OO__PPO__CLIP_RANGE", 0.1, 0.2),
+    ConfigSpace.UniformFloatHyperparameter("OO__PPO__GAE_LAMBDA", 0.9, 0.95),
+    ConfigSpace.UniformFloatHyperparameter("OO__PPO__GAMMA", 0.99, 0.9998),
   ])
   scenario = Scenario(configspace=cs, deterministic=False, n_trials=200)
   smac = HyperparameterOptimizationFacade(scenario = scenario, target_function = train_oll_based_seeker)
