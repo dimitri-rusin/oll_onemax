@@ -51,7 +51,7 @@ def evaluate(policy, closeness_to_optimum, episode_seed):
 def custom_converter(obj):
   if 'details' in obj and not type(obj['details']) == str:
     # Convert details dictionary to a one-line string
-    details_str = json.dumps(list(obj['details']), separators=(', ', ':'))
+    details_str = json.dumps(list(obj['details'].values()), separators=(', ', ':'))
     obj['details'] = details_str
   return obj
 
