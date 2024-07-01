@@ -120,9 +120,9 @@ def statistics(dimensionalities, closeness_to_optimum, precision, seed, filepath
 
 
 policies_info = statistics(
-  dimensionalities = [12, 15],
+  dimensionalities = [500, 1_000, 2_000, 3_000],
   seed = 42,
-  precision = 100,
+  precision = 500,
   closeness_to_optimum = 0.5,
   filepath = 'computed/policies_info.json',
 )
