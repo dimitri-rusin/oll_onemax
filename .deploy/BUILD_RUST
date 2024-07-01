@@ -47,8 +47,9 @@ conda activate .deploy/conda_environment/
 # Check if Cargo is installed. If not install Cargo. Then install maturin.
 if ! command -v $HOME/.cargo/bin/cargo &> /dev/null
 then
-    echo "Cargo is not installed. Installing Cargo..."
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  echo "Cargo is not installed. Installing Cargo..."
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  source "$HOME/.cargo/env"
 fi
 
 $HOME/.cargo/bin/cargo install maturin --version 1.5.1
