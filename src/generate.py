@@ -483,7 +483,7 @@ def run_smac():
     ConfigSpace.Constant("OO__DIMENSIONALITY", dimensionality),
     ConfigSpace.Constant("OO__LAMBDAS", str(action_space)),
     ConfigSpace.Constant("OO__MAX_TRAINING_TIMESTEPS", num_training_timesteps),
-    ConfigSpace.Constant("OO__NUM_ENVIRONMENTS", 4),
+    ConfigSpace.Constant("OO__NUM_ENVIRONMENTS", 16),
     ConfigSpace.Constant("OO__NUM_EVALUATION_EPISODES", 150),
     ConfigSpace.Constant("OO__NUM_TIMESTEPS_PER_EVALUATION", 400),
 
