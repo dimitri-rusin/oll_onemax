@@ -21,7 +21,7 @@
     policy: [MlpPolicy]
     vf_coef: [0.5]
   slurm:
-    account: [sc122-dimitri]
+    account: [ec262-dimitri]
     cpus_per_task: [1]
     nodes: [1]
     partition: [standard]
