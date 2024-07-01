@@ -53,8 +53,10 @@ def custom_converter(obj):
     # Convert details dictionary to a one-line string
     details_str = json.dumps(list(obj['details'].values()), separators=(', ', ':'))
     action_space_str = json.dumps(obj['action_space'], separators=(', ', ':'))
+    reduced_action_space_str = json.dumps(obj['reduced_action_space'], separators=(', ', ':'))
     obj['details'] = details_str
     obj['action_space'] = action_space_str
+    obj['reduced_action_space'] = reduced_action_space_str
   return obj
 
 def statistics(dimensionalities, closeness_to_optimum, precision, seed, filepath):
@@ -109,7 +111,8 @@ def statistics(dimensionalities, closeness_to_optimum, precision, seed, filepath
         'closeness_to_optimum': closeness_to_optimum,
 
         'details': policy,
-        'action_space': sorted(list(set(policy.values()))),
+        'reduced_action_space': sorted(list(set(policy.values()))),
+        'action_space': action_space,
       }
 
       policies_info.append(policy_info)
