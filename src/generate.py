@@ -434,18 +434,22 @@ def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration
   environments = stable_baselines3.common.env_util.make_vec_env(create_env, n_envs=config['num_environments'])
 
   ppo_agent = stable_baselines3.PPO(
-    policy = config['ppo']['policy'],
-    env = environments,
-    learning_rate = config['ppo']['learning_rate'],
-    n_steps = config['ppo']['n_steps'],
-    batch_size = config['ppo']['batch_size'],
-    n_epochs = config['ppo']['n_epochs'],
-    gamma = config['ppo']['gamma'],
-    gae_lambda = config['ppo']['gae_lambda'],
-    vf_coef = config['ppo']['vf_coef'],
-    ent_coef = config['ppo']['ent_coef'],
-    clip_range = config['ppo']['clip_range'],
-    verbose = 1,
+    policy=config['ppo']['policy'],
+    env=environments,
+    learning_rate=config['ppo']['learning_rate'],
+    n_steps=config['ppo']['n_steps'],
+    batch_size=config['ppo']['batch_size'],
+    n_epochs=config['ppo']['n_epochs'],
+    gamma=config['ppo']['gamma'],
+    gae_lambda=config['ppo']['gae_lambda'],
+    vf_coef=config['ppo']['vf_coef'],
+    ent_coef=config['ppo']['ent_coef'],
+    clip_range=config['ppo']['clip_range'],
+    verbose=config['ppo']['verbose'],
+    device=config['ppo']['device'],
+    max_grad_norm=config['ppo']['max_grad_norm'],
+    sde_sample_freq=config['ppo']['sde_sample_freq'],
+    stats_window_size=config['ppo']['stats_window_size'],
   )
 
   evaluate_policy(
