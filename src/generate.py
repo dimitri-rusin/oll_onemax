@@ -258,7 +258,7 @@ def evaluate_policy(
     policy_id = cursor.lastrowid
     cursor.executemany(
       'INSERT INTO POLICY_DETAILS (policy_id, fitness, mutation_rate, mutation_size, crossover_rate, crossover_size) VALUES (?, ?, ?, ?, ?, ?)',
-      [(policy_id, fitness, mutation_rate, mutation_size, crossover_rate, crossover_size) for fitness, (mutation_rate, mutation_size, crossover_rate, crossover_size) in size_policy.items()]
+      [(policy_id, fitness, mutation_rate, int(mutation_size), crossover_rate, int(crossover_size)) for fitness, (mutation_rate, mutation_size, crossover_rate, crossover_size) in size_policy.items()]
     )
 
   num_function_evaluations_list = []
@@ -267,7 +267,7 @@ def evaluate_policy(
     print(f"Policy {policy_id}: Evaluating episode {episode_index + 1:,} / {num_evaluation_episodes:,}.")
     episode_seed = episode_seed_generator.integers(int(1e9))
     num_function_evaluations, num_evaluation_timesteps = evaluate_episode(size_policy, episode_seed, closeness_to_optimum)
-    num_function_evaluations_list.append((policy_id, episode_seed, num_evaluation_timesteps, num_function_evaluations))
+    num_function_evaluations_list.append((policy_id, int(episode_seed), num_evaluation_timesteps, num_function_evaluations))
 
   with sqlite3.connect(db_path, timeout=10) as database:
     cursor = database.cursor()
@@ -363,7 +363,7 @@ def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration
     print(f"Policy {policy_id}: Evaluating episode {episode_index + 1:,} / {num_evaluation_episodes:,}.")
     episode_seed = main_generator.integers(int(1e9))
     num_function_evaluations, num_evaluation_timesteps = evaluate_episode(theory_derived_size_policy, episode_seed, config['closeness_to_optimum'])
-    episode_data.append((policy_id, episode_seed, num_evaluation_timesteps, num_function_evaluations))
+    episode_data.append((policy_id, int(episode_seed), num_evaluation_timesteps, num_function_evaluations))
 
   with sqlite3.connect(db_path, timeout=10) as database:
     with database:
@@ -436,7 +436,6 @@ def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration
   ppo_agent = stable_baselines3.PPO(
     policy = config['ppo']['policy'],
     env = environments,
-    policy_kwargs = {'net_arch': config['ppo']['net_arch'], 'activation_fn': torch.nn.ReLU},
     learning_rate = config['ppo']['learning_rate'],
     n_steps = config['ppo']['n_steps'],
     batch_size = config['ppo']['batch_size'],
@@ -471,37 +470,46 @@ def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration
   # area under the curve: sum over all timesteps, sum the differences between actual policy and theoretical policy
   return callback.average_function_evaluations
 
+def run_smac():
 
+  num_training_timesteps = 2_000_000
+  dimensionality = 80
+  action_space = [2 ** i for i in range(int(numpy.log2(dimensionality)))]
 
-if __name__ == '__main__':
   cs = ConfigSpace.ConfigurationSpace()
   cs.add_hyperparameters([
-    ConfigSpace.Constant("OO__ACTION_TYPE", "DISCRETE"),
-    ConfigSpace.Constant("OO__CLOSENESS_TO_OPTIMUM", 0.8),
-    ConfigSpace.Constant("OO__DB_PATH", "computed/sunshine/action_sets/abrasion.db"),
-    ConfigSpace.Constant("OO__DIMENSIONALITY", 80),
-    ConfigSpace.Constant("OO__LAMBDAS", "[2, 4, 6, 7, 8]"),
-    ConfigSpace.Constant("OO__MAX_TRAINING_TIMESTEPS", 2_000_000),
-    ConfigSpace.Constant("OO__NUM_ENVIRONMENTS", 1),
+    ConfigSpace.Constant("OO__CLOSENESS_TO_OPTIMUM", 0.5),
+    ConfigSpace.Constant("OO__DB_PATH", "computed/sunshine/testers/1.db"),
+    ConfigSpace.Constant("OO__DIMENSIONALITY", dimensionality),
+    ConfigSpace.Constant("OO__LAMBDAS", str(action_space)),
+    ConfigSpace.Constant("OO__MAX_TRAINING_TIMESTEPS", num_training_timesteps),
+    ConfigSpace.Constant("OO__NUM_ENVIRONMENTS", 4),
     ConfigSpace.Constant("OO__NUM_EVALUATION_EPISODES", 150),
     ConfigSpace.Constant("OO__NUM_TIMESTEPS_PER_EVALUATION", 400),
-    ConfigSpace.Constant("OO__REWARD_TYPE", "EVALUATIONS_PLUS_FITNESS"),
-    ConfigSpace.Constant("OO__STATE_TYPE", "ONE_HOT_ENCODED"),
 
-    ConfigSpace.Constant("OO__PPO__BATCH_SIZE", 100),
+    ConfigSpace.Constant("OO__PPO__BATCH_SIZE", 64),
+    ConfigSpace.Constant("OO__PPO__CLIP_RANGE", 0.2),
+    ConfigSpace.Constant("OO__PPO__DEVICE", "auto"),
     ConfigSpace.Constant("OO__PPO__ENT_COEF", 0.0),
+    ConfigSpace.Constant("OO__PPO__GAE_LAMBDA", 0.95),
+    ConfigSpace.Constant("OO__PPO__GAMMA", 0.99),
     ConfigSpace.Constant("OO__PPO__LEARNING_RATE", 0.0003),
+    ConfigSpace.Constant("OO__PPO__MAX_GRAD_NORM", 0.5),
     ConfigSpace.Constant("OO__PPO__N_EPOCHS", 10),
-    ConfigSpace.Constant("OO__PPO__N_STEPS", 2000),
-    ConfigSpace.Constant("OO__PPO__NET_ARCH", "[50, 50]"),
+    ConfigSpace.Constant("OO__PPO__N_STEPS", 2048),
     ConfigSpace.Constant("OO__PPO__POLICY", "MlpPolicy"),
+    ConfigSpace.Constant("OO__PPO__SDE_SAMPLE_FREQ", -1),
+    ConfigSpace.Constant("OO__PPO__STATS_WINDOW_SIZE", 100),
+    ConfigSpace.Constant("OO__PPO__VERBOSE", 0),
     ConfigSpace.Constant("OO__PPO__VF_COEF", 0.5),
 
-    ConfigSpace.UniformFloatHyperparameter("OO__PPO__CLIP_RANGE", 0.1, 0.2),
-    ConfigSpace.UniformFloatHyperparameter("OO__PPO__GAE_LAMBDA", 0.9, 0.95),
-    ConfigSpace.UniformFloatHyperparameter("OO__PPO__GAMMA", 0.99, 0.9998),
+    ConfigSpace.Constant("OO__REWARD_TYPE", "EVALUATIONS_PLUS_FITNESS"),
+    ConfigSpace.Constant("OO__STATE_TYPE", "ONE_HOT_ENCODED"),
   ])
-  scenario = Scenario(configspace=cs, deterministic=False, n_trials=200)
-  smac = HyperparameterOptimizationFacade(scenario = scenario, target_function = train_oll_based_seeker)
-  incumbent = smac.optimize()
-  print("Best configuration:", incumbent)
+
+  config = cs.get_default_configuration()
+  seed = 42
+  train_oll_based_seeker(config, seed)
+
+if __name__ == '__main__':
+  run_smac()
