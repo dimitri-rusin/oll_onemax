@@ -483,7 +483,7 @@ def run_smac():
   cs = ConfigSpace.ConfigurationSpace()
   cs.add_hyperparameters([
     ConfigSpace.Constant("OO__CLOSENESS_TO_OPTIMUM", 0.5),
-    ConfigSpace.Constant("OO__DB_PATH", "computed/sunshine/testers/1.db"),
+    ConfigSpace.Constant("OO__DB_PATH", "computed/sunshine/testers/2000.db"),
     ConfigSpace.Constant("OO__DIMENSIONALITY", dimensionality),
     ConfigSpace.Constant("OO__LAMBDAS", str(action_space)),
     ConfigSpace.Constant("OO__MAX_TRAINING_TIMESTEPS", num_training_timesteps),
