@@ -52,7 +52,9 @@ def custom_converter(obj):
   if 'details' in obj and not type(obj['details']) == str:
     # Convert details dictionary to a one-line string
     details_str = json.dumps(list(obj['details'].values()), separators=(', ', ':'))
+    action_space_str = json.dumps(obj['action_space'], separators=(', ', ':'))
     obj['details'] = details_str
+    obj['action_space'] = action_space_str
   return obj
 
 def statistics(dimensionalities, closeness_to_optimum, precision, seed, filepath):
@@ -107,6 +109,7 @@ def statistics(dimensionalities, closeness_to_optimum, precision, seed, filepath
         'closeness_to_optimum': closeness_to_optimum,
 
         'details': policy,
+        'action_space': sorted(list(set(policy.values()))),
       }
 
       policies_info.append(policy_info)
@@ -122,7 +125,7 @@ def statistics(dimensionalities, closeness_to_optimum, precision, seed, filepath
 
 
 policies_info = statistics(
-  dimensionalities = [500, 1_000, 2_000, 3_000],
+  dimensionalities = [12, 13],
   seed = 42,
   precision = 500,
   closeness_to_optimum = 0.5,
