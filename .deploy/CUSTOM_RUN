@@ -35,9 +35,14 @@ if [ -f "$conda_sh_path" ]; then
   echo "Sourcing: $conda_sh_path"
   source "$conda_sh_path"
 else
+  echo "Exporting PATH with Conda bin directory"
   export PATH="${conda_path%/bin/conda}/bin:$PATH"
 fi
 
+# The set envelopment comes from an issue where the Anaconda3 access unset variables. We disable the shell policy to stop
+# script execution, when an unset variable is accessed. More info: https://github.com/conda/conda/issues/3200
+set +u
 conda activate .deploy/conda_environment
+set -u
 
-python config/config.py "$1"
+python src/rounding.py
