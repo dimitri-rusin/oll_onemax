@@ -40,6 +40,12 @@ else
 fi
 
 
+# Rename remote from origin to github [Having a remote named origin has caused an issue in the past.]
+git submodule | awk '{ print $2 }' | while read -r submodule_path; do
+  if git -C "$submodule_path" remote | grep -qx 'origin'; then
+    git -C "$submodule_path" remote rename origin github
+  fi
+done
 
 # Initialize and update git submodules
 git submodule init
