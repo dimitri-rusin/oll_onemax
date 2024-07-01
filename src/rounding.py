@@ -1,5 +1,4 @@
 import json
-import inspectify
 import numpy
 import onell_algs_rs
 import os
@@ -48,6 +47,13 @@ def evaluate(policy, closeness_to_optimum, episode_seed):
     probability = closeness_to_optimum,
   )
   return num_function_evaluations, num_evaluation_timesteps
+
+def custom_converter(obj):
+  if 'details' in obj:
+    # Convert details dictionary to a one-line string
+    details_str = json.dumps(list(obj['details']), separators=(', ', ':'))
+    obj['details'] = details_str
+  return obj
 
 def statistics(dimensionalities, closeness_to_optimum, precision, seed, filepath):
 
@@ -98,12 +104,16 @@ def statistics(dimensionalities, closeness_to_optimum, precision, seed, filepath
         'avg_num_function_evaluations': avg_num_function_evaluations,
         'std_dev_function_evaluations': std_dev_evaluations,
         'closeness_to_optimum': closeness_to_optimum,
+
+        'details': policy,
       }
 
       policies_info.append(policy_info)
 
+  converted_policies = [custom_converter(policy) for policy in policies_info]
+
   with open(filepath, 'w') as json_file:
-    print(json.dumps(policies_info, indent = 2), file = json_file)
+    json.dump(converted_policies, json_file, indent=2)
 
   return policies_info
 
