@@ -49,7 +49,7 @@ def evaluate(policy, closeness_to_optimum, episode_seed):
   return num_function_evaluations, num_evaluation_timesteps
 
 def custom_converter(obj):
-  if 'details' in obj:
+  if 'details' in obj and not type(obj['details']) == str:
     # Convert details dictionary to a one-line string
     details_str = json.dumps(list(obj['details']), separators=(', ', ':'))
     obj['details'] = details_str
@@ -57,6 +57,7 @@ def custom_converter(obj):
 
 def statistics(dimensionalities, closeness_to_optimum, precision, seed, filepath):
 
+  num_files = 0
   policies_info = []
   for dimensionality in dimensionalities:
     action_space = [2 ** i for i in range(int(numpy.log2(dimensionality)))]
@@ -110,19 +111,20 @@ def statistics(dimensionalities, closeness_to_optimum, precision, seed, filepath
 
       policies_info.append(policy_info)
 
-  converted_policies = [custom_converter(policy) for policy in policies_info]
+      converted_policies = [custom_converter(policy) for policy in policies_info]
 
-  with open(filepath, 'w') as json_file:
-    json.dump(converted_policies, json_file, indent=2)
+      num_files += 1
+      with open(f"{filepath}_{num_files}.json", 'w') as json_file:
+        json.dump(converted_policies, json_file, indent=2)
 
   return policies_info
 
 
 
 policies_info = statistics(
-  dimensionalities = [500, 1_000, 2_000, 3_000],
+  dimensionalities = [12, 13],
   seed = 42,
   precision = 500,
   closeness_to_optimum = 0.5,
-  filepath = 'computed/policies_info.json',
+  filepath = 'computed/policies_info',
 )
