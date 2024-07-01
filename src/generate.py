@@ -477,7 +477,7 @@ def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration
 def run_smac():
 
   num_training_timesteps = 2_000_000
-  dimensionality = 80
+  dimensionality = 2_000
   action_space = [2 ** i for i in range(int(numpy.log2(dimensionality)))]
 
   cs = ConfigSpace.ConfigurationSpace()
