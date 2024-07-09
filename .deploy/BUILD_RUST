@@ -17,29 +17,20 @@ if [ "$(whoami)" = "dimitri_rusin_cirrus" ]; then
   cd /work/ec262/ec262/dimitri_rusin_cirrus/oll_onemax
 fi
 
-# Find the path to the conda executable
-conda_path=$(which conda)
-
-# Determine the path to conda.sh based on the conda executable location
-if [[ "$conda_path" == */condabin/conda ]]; then
-  conda_sh_path="${conda_path%/condabin/conda}/etc/profile.d/conda.sh"
-elif [[ "$conda_path" == */bin/conda ]]; then
-  conda_sh_path="${conda_path%/bin/conda}/etc/profile.d/conda.sh"
-else
-  echo "Error: Unable to locate the conda.sh file."
-  exit 1
+# Initialize and update git submodules
+if [ -d .git ]; then
+  # Rename remote from origin to github [Having a remote named origin has caused an issue in the past.]
+  git submodule | awk '{ print $2 }' | while read -r submodule_path; do
+    if git -C "$submodule_path" remote | grep -qx 'origin'; then
+      git -C "$submodule_path" remote rename origin github
+    fi
+  done
+  git submodule init
+  git submodule update
 fi
 
-# Source conda.sh if it exists, else export PATH
-if [ -f "$conda_sh_path" ]; then
-  echo "Sourcing: $conda_sh_path"
-  source "$conda_sh_path"
-else
-  echo "Exporting PATH with Conda bin directory"
-  export PATH="${conda_path%/bin/conda}/bin:$PATH"
-fi
-
-
+# Initialize conda in the current shell (without modifying any shell configuration files)
+eval "$(.deploy/miniconda/bin/conda shell.bash hook)"
 
 # The set envelopment comes from an issue where the Anaconda3 access unset variables. We disable our shell policy (set above) of stopping
 # script execution, when an unset variable is accessed. More info: https://github.com/conda/conda/issues/3200
@@ -56,6 +47,8 @@ then
 fi
 
 $HOME/.cargo/bin/cargo install maturin --version 1.5.1
+
+rm -rf DE0CH_OLL/onell_algs_rs/target/
 
 # Build Rust project using maturin, within its directory (isolated in a subshell)
 (

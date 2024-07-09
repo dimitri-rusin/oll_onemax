@@ -17,46 +17,37 @@ if [ "$(whoami)" = "dimitri_rusin_cirrus" ]; then
   cd /work/ec262/ec262/dimitri_rusin_cirrus/oll_onemax
 fi
 
-# Find the path to the conda executable
-conda_path=$(which conda)
-
-# Determine the path to conda.sh based on the conda executable location
-if [[ "$conda_path" == */condabin/conda ]]; then
-  conda_sh_path="${conda_path%/condabin/conda}/etc/profile.d/conda.sh"
-elif [[ "$conda_path" == */bin/conda ]]; then
-  conda_sh_path="${conda_path%/bin/conda}/etc/profile.d/conda.sh"
-else
-  echo "Error: Unable to locate the conda.sh file."
-  exit 1
-fi
-
-# Source conda.sh if it exists, else export PATH
-if [ -f "$conda_sh_path" ]; then
-  echo "Sourcing: $conda_sh_path"
-  source "$conda_sh_path"
-else
-  echo "Exporting PATH with Conda bin directory"
-  export PATH="${conda_path%/bin/conda}/bin:$PATH"
-fi
-
-
-# Rename remote from origin to github [Having a remote named origin has caused an issue in the past.]
-git submodule | awk '{ print $2 }' | while read -r submodule_path; do
-  if git -C "$submodule_path" remote | grep -qx 'origin'; then
-    git -C "$submodule_path" remote rename origin github
-  fi
-done
-
 # Initialize and update git submodules
-git submodule init
-git submodule update
+if [ -d .git ]; then
+  # Rename remote from origin to github [Having a remote named origin has caused an issue in the past.]
+  git submodule | awk '{ print $2 }' | while read -r submodule_path; do
+    if git -C "$submodule_path" remote | grep -qx 'origin'; then
+      git -C "$submodule_path" remote rename origin github
+    fi
+  done
+  git submodule init
+  git submodule update
+fi
+
+# Define the directory for local Miniconda installation
+MINICONDA_DIR=".deploy/miniconda/"
+
+# Clean up any previous Conda environment and build targets
+rm -rf $MINICONDA_DIR
+
+# Install Miniconda locally
+curl -o /tmp/miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-py39_24.5.0-0-Linux-x86_64.sh
+bash /tmp/miniconda.sh -b -p $MINICONDA_DIR
+rm /tmp/miniconda.sh
+
+# Initialize conda in the current shell (without modifying any shell configuration files)
+eval "$(.deploy/miniconda/bin/conda shell.bash hook)"
 
 # Activate the base Conda environment
 conda activate base
 
 # Clean up any previous Conda environment and build targets
 rm -rf .deploy/conda_environment/
-rm -rf DE0CH_OLL/onell_algs_rs/target/
 
 # Create and activate a new Conda environment based on .conda.yaml configuration
 conda env create --prefix .deploy/conda_environment/ --file .deploy/conda.yaml --debug
