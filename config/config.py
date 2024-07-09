@@ -148,21 +148,27 @@ def write_config_to_yaml(configs, wordlist, basename_without_suffix):
     expanded_config = expand_config(config)
     keys, values = zip(*expanded_config.items())
 
-    for combination in itertools.product(*values):
-      single_config = dict(zip(keys, combination))
-      nested_config = {}
+    try:
+      for combination in itertools.product(*values):
+        single_config = dict(zip(keys, combination))
+        nested_config = {}
 
-      for key, value in single_config.items():
-        if '__' in key:
-          main_key, sub_key = key.split('__', 1)
-          if main_key not in nested_config:
-            nested_config[main_key] = {}
-          nested_config[main_key][sub_key] = value
-        else:
-          nested_config[key] = value
+        for key, value in single_config.items():
+          if '__' in key:
+            main_key, sub_key = key.split('__', 1)
+            if main_key not in nested_config:
+              nested_config[main_key] = {}
+            nested_config[main_key][sub_key] = value
+          else:
+            nested_config[key] = value
 
-      filename_words = generate_filename_from_config(nested_config, wordlist)
-      all_filenames.append((nested_config, filename_words))
+        filename_words = generate_filename_from_config(nested_config, wordlist)
+        all_filenames.append((nested_config, filename_words))
+    except TypeError as e:
+      if "not iterable" in str(e):
+        raise TypeError("Every right-hand side in a .yaml file under .ranges/ should be a list of possible values.") from e
+      else:
+        raise
 
   pruned_filenames = prune_filenames([words for _, words in all_filenames])
 

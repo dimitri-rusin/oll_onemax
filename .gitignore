@@ -1,8 +1,9 @@
+config/*
 !config/*.py
 !config/.ranges/
+
 **/__pycache__/
 .deploy/conda_environment/
 computed/
-config/*
 miniconda/
 smac3_output/

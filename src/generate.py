@@ -289,11 +289,12 @@ def evaluate_policy(
 
 def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration, seed: int = 0):
 
-  # Get Python dictionary out of the ConfigSpace object.
-  environment_variables = ConfigSpace__configuration.get_dictionary()
-
-  # Load config as if from the OS environment.
-  config = load_config(environment_variables)
+  if ConfigSpace__configuration is not None:
+    environment_variables = ConfigSpace__configuration.get_dictionary()
+    config = load_config(environment_variables = environment_variables)
+  else:
+    config = load_config(environment_variables = os.environ)
+    seed = config["random_seed"]
 
   mersenne_twister = numpy.random.MT19937(seed)
   main_generator = numpy.random.Generator(mersenne_twister)
@@ -474,46 +475,7 @@ def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration
   # area under the curve: sum over all timesteps, sum the differences between actual policy and theoretical policy
   return callback.average_function_evaluations
 
-def run_smac():
 
-  num_training_timesteps = 2_000_000
-  dimensionality = 80
-  action_space = [2 ** i for i in range(int(numpy.log2(dimensionality)))]
-
-  cs = ConfigSpace.ConfigurationSpace()
-  cs.add_hyperparameters([
-    ConfigSpace.Constant("OO__CLOSENESS_TO_OPTIMUM", 0.5),
-    ConfigSpace.Constant("OO__DB_PATH", "computed/sunshine/testers/2000.db"),
-    ConfigSpace.Constant("OO__DIMENSIONALITY", dimensionality),
-    ConfigSpace.Constant("OO__LAMBDAS", str(action_space)),
-    ConfigSpace.Constant("OO__MAX_TRAINING_TIMESTEPS", num_training_timesteps),
-    ConfigSpace.Constant("OO__NUM_ENVIRONMENTS", 16),
-    ConfigSpace.Constant("OO__NUM_EVALUATION_EPISODES", 150),
-    ConfigSpace.Constant("OO__NUM_TIMESTEPS_PER_EVALUATION", 400),
-
-    ConfigSpace.Constant("OO__PPO__BATCH_SIZE", 64),
-    ConfigSpace.Constant("OO__PPO__CLIP_RANGE", 0.2),
-    ConfigSpace.Constant("OO__PPO__DEVICE", "auto"),
-    ConfigSpace.Constant("OO__PPO__ENT_COEF", 0.0),
-    ConfigSpace.Constant("OO__PPO__GAE_LAMBDA", 0.95),
-    ConfigSpace.Constant("OO__PPO__GAMMA", 0.99),
-    ConfigSpace.Constant("OO__PPO__LEARNING_RATE", 0.0003),
-    ConfigSpace.Constant("OO__PPO__MAX_GRAD_NORM", 0.5),
-    ConfigSpace.Constant("OO__PPO__N_EPOCHS", 10),
-    ConfigSpace.Constant("OO__PPO__N_STEPS", 2048),
-    ConfigSpace.Constant("OO__PPO__POLICY", "MlpPolicy"),
-    ConfigSpace.Constant("OO__PPO__SDE_SAMPLE_FREQ", -1),
-    ConfigSpace.Constant("OO__PPO__STATS_WINDOW_SIZE", 100),
-    ConfigSpace.Constant("OO__PPO__VERBOSE", 0),
-    ConfigSpace.Constant("OO__PPO__VF_COEF", 0.5),
-
-    ConfigSpace.Constant("OO__REWARD_TYPE", "EVALUATIONS_PLUS_FITNESS"),
-    ConfigSpace.Constant("OO__STATE_TYPE", "ONE_HOT_ENCODED"),
-  ])
-
-  config = cs.get_default_configuration()
-  seed = 42
-  train_oll_based_seeker(config, seed)
 
 if __name__ == '__main__':
-  run_smac()
+  train_oll_based_seeker(None, 0)
