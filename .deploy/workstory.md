@@ -4,6 +4,48 @@
 
 
 
+
+
+
+
+
+```sh
+
+   slurm:
+    account: []
+    cpus_per_task: []
+    nodes: [1]
+    partition: [standard]
+    qos: [standard]
+    ntasks_per_node: [1]
+    time: ["07:00:00"]
+
+
+
+sbatch \
+  --account=ec262-dimitri \
+  --cpus-per-task=1 \
+  --nodes=1 \
+  --partition=standard \
+  --qos=standard \
+  --ntasks-per-node=1 \
+  --time="07:00:00" \
+  .deploy/CUSTOM_RUN
+
+
+sacct --job=5531370
+
+sacct --account=ec262-dimitri
+
+sacct --account=ec262-dimitri --format=JobID,JobName,State,Start,End,Elapsed
+
+
+```
+
+
+
+
+
 # Check limits
 ```sh
 sacctmgr list user $USER withassoc
@@ -1246,3 +1288,7 @@ Replace the wheel filename with the actual filename of the wheel you built.
 This comprehensive process covers setting up the CentOS 7 environment with Python 3.6, installing all necessary dependencies, including `tomli` and `setuptools_rust`, and building your Rust project with Python bindings. Ensure to adjust file paths and project names as per your specific setup.
 
 =====================
+
+```
+git clone https://github.com/dimitri-rusin/oll_onemax.git
+```
