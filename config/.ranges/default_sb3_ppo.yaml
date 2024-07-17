@@ -1,9 +1,9 @@
-- dimensionality: [80]
+- dimensionality: [100]
   lambdas: [[1, 2, 4, 8, 16, 32]]
   max_training_timesteps: [2_000]
-  num_environments: [16]
-  num_evaluation_episodes: [150]
-  num_timesteps_per_evaluation: [400]
+  num_environments: [1]
+  num_evaluation_episodes: [500]
+  num_timesteps_per_evaluation: [2_048]
   ppo:
     batch_size: [64]
     clip_range: [0.2]
@@ -28,7 +28,7 @@
     partition: [standard]
     qos: [standard]
     time: ["07:00:00"]
-  closeness_to_optimum: [0.5]
+  closeness_to_optimum: [0.85]
   random_seed: "list(range(100, 110))"
   reward_type: [EVALUATIONS_PLUS_FITNESS]
   state_type: [ONE_HOT_ENCODED]

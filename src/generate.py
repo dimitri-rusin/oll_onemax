@@ -180,7 +180,7 @@ def load_config(environment_variables = os.environ):
         parsed_value = []
         for item in value.split(','):
           item = item.strip()  # Remove whitespace
-          if item.isdigit():
+          if item[1:].isdigit() if item.startswith('-') else item.isdigit():
             parsed_value.append(int(item))
           elif all(char.isdigit() or char == '.' for char in item):
             try:
@@ -189,7 +189,7 @@ def load_config(environment_variables = os.environ):
               parsed_value.append(item)
           else:
             parsed_value.append(item)
-      elif value.isdigit():
+      elif value[1:].isdigit() if value.startswith('-') else value.isdigit():
         parsed_value = int(value)
       elif all(char.isdigit() or char == '.' for char in value):
         try:
@@ -221,7 +221,7 @@ def flatten_config(prefix, nested_config):
 def evaluate_policy(
   crossover_rates,
   crossover_sizes,
-  db_path,
+  database_path,
   dimensionality,
   lambdas,
   mutation_rates,
@@ -251,7 +251,7 @@ def evaluate_policy(
     for fitness, (mutation_rate_index, mutation_size_index, crossover_rate_index, crossover_size_index) in index_policy.items():
       size_policy[fitness] = (mutation_rates[mutation_rate_index], int(mutation_sizes[mutation_size_index]), crossover_rates[crossover_rate_index], int(crossover_sizes[crossover_size_index]))
 
-  with sqlite3.connect(db_path) as database:
+  with sqlite3.connect(database_path) as database:
     cursor = database.cursor()
     current_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
     cursor.execute('INSERT INTO CONSTRUCTED_POLICIES (num_total_timesteps, created_at) VALUES (?, ?)', (num_training_timesteps, current_time))
@@ -269,7 +269,7 @@ def evaluate_policy(
     num_function_evaluations, num_evaluation_timesteps = evaluate_episode(size_policy, episode_seed, closeness_to_optimum)
     num_function_evaluations_list.append((policy_id, int(episode_seed), num_evaluation_timesteps, num_function_evaluations))
 
-  with sqlite3.connect(db_path, timeout=10) as database:
+  with sqlite3.connect(database_path, timeout=10) as database:
     cursor = database.cursor()
     cursor.executemany(
       'INSERT INTO EVALUATION_EPISODES (policy_id, episode_seed, num_evaluation_timesteps, num_function_evaluations) VALUES (?, ?, ?, ?)',
@@ -287,6 +287,39 @@ def evaluate_policy(
 
 
 
+
+
+import argparse
+import ast
+import hashlib
+import io
+import itertools
+import os
+import re
+import ruamel.yaml
+import socket
+
+def generate_filename_from_config(config, wordlist):
+
+  def sort_dict_alphabetically(d):
+      if not isinstance(d, dict):
+          return d
+      return {k: sort_dict_alphabetically(v) for k, v in sorted(d.items())}
+
+  sorted_config = sort_dict_alphabetically(config)
+  config_str = str(sorted_config)
+
+  max_words = 16
+  digest = hashlib.sha256(config_str.encode()).hexdigest()
+  words = []
+  for i in range(0, max_words * 4, 4):
+    index = int(digest[i:i+4], 16) % len(wordlist)
+    words.append(wordlist[index])
+
+  config_filename_prefix = '_'.join(words[:4])
+
+  return config_filename_prefix
+
 def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration, seed: int = 0):
 
   if ConfigSpace__configuration is not None:
@@ -296,17 +329,25 @@ def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration
     config = load_config(environment_variables = os.environ)
     seed = config["random_seed"]
 
+    with open('.deploy/eff_large_wordlist.txt', 'r') as file:
+      wordlist = [line.strip().split()[1] for line in file]
+
+    filename_prefix = generate_filename_from_config(config, wordlist)
+    hostname = socket.gethostname()
+    current_date = datetime.datetime.now().strftime("%Y-%B-%d___%H:%M:%S")
+    config['database_path'] = f"computed/{hostname}/{current_date}/{filename_prefix}.db"
+
   mersenne_twister = numpy.random.MT19937(seed)
   main_generator = numpy.random.Generator(mersenne_twister)
 
-  if os.path.isfile(config['db_path']):
-    os.remove(config['db_path'])
+  if os.path.isfile(config['database_path']):
+    os.remove(config['database_path'])
 
-  directory_path = os.path.dirname(config['db_path'])
+  directory_path = os.path.dirname(config['database_path'])
   if not os.path.exists(directory_path):
     os.makedirs(directory_path, exist_ok=True)
 
-  database = sqlite3.connect(config['db_path'])
+  database = sqlite3.connect(config['database_path'])
 
   with database:
     database.executescript('''
@@ -355,7 +396,7 @@ def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration
         [(policy_id, fitness, mutation_rate, mutation_size, crossover_rate, crossover_size) for fitness, (mutation_rate, mutation_size, crossover_rate, crossover_size) in theory_derived_size_policy.items()]
       )
 
-  db_path = config['db_path']
+  database_path = config['database_path']
   num_evaluation_episodes = config['num_evaluation_episodes']
 
 
@@ -366,7 +407,7 @@ def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration
     num_function_evaluations, num_evaluation_timesteps = evaluate_episode(theory_derived_size_policy, episode_seed, config['closeness_to_optimum'])
     episode_data.append((policy_id, int(episode_seed), num_evaluation_timesteps, num_function_evaluations))
 
-  with sqlite3.connect(db_path, timeout=10) as database:
+  with sqlite3.connect(database_path, timeout=10) as database:
     with database:
       cursor = database.cursor()
       cursor.executemany(
@@ -406,7 +447,7 @@ def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration
       self.average_function_evaluations, self.average_evaluation_timesteps = evaluate_policy(
         crossover_rates = crossover_rates,
         crossover_sizes = crossover_sizes,
-        db_path = config['db_path'],
+        database_path = config['database_path'],
         dimensionality = dimensionality,
         lambdas = lambdas,
         mutation_rates = mutation_rates,
@@ -456,7 +497,7 @@ def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration
   evaluate_policy(
     crossover_rates = crossover_rates,
     crossover_sizes = crossover_sizes,
-    db_path = config['db_path'],
+    database_path = config['database_path'],
     dimensionality = dimensionality,
     lambdas = lambdas,
     mutation_rates = mutation_rates,
@@ -478,4 +519,4 @@ def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration
 
 
 if __name__ == '__main__':
-  train_oll_based_seeker(None, 0)
+  train_oll_based_seeker(None)

@@ -3,6 +3,7 @@ import ast
 import hashlib
 import io
 import itertools
+import inspectify
 import os
 import re
 import ruamel.yaml
@@ -24,10 +25,13 @@ def load_wordlist(filename):
 def generate_filename_from_config(single_config, wordlist):
   # This "default_flow_style=None" makes sure that we get lists with "[]" rather than with "-". Because "-" creates new lines and we want to keep it concise.
 
-  yaml = ruamel.yaml.YAML()
-  stream = io.StringIO()
-  yaml.dump(single_config, stream)
-  config_str = stream.getvalue()
+  def sort_dict_alphabetically(d):
+    if not isinstance(d, dict):
+      return d
+    return {k: sort_dict_alphabetically(v) for k, v in sorted(d.items())}
+
+  sorted_config = sort_dict_alphabetically(single_config)
+  config_str = str(sorted_config)
 
   max_words = 16 # because we have 32 bytes and we use 2 bytes to find one word in the downloaded word list, so 16 words at max
   digest = hashlib.sha256(config_str.encode()).hexdigest()
@@ -36,27 +40,6 @@ def generate_filename_from_config(single_config, wordlist):
     index = int(digest[i:i+4], 16) % len(wordlist)
     words.append(wordlist[index])
   return words
-
-def prune_filenames(filenames):
-    # Count how many filenames start with each first word
-    first_word_count = {words[0]: 0 for words in filenames}
-    for words in filenames:
-        first_word_count[words[0]] += 1
-
-    pruned_filenames = []
-    for words in filenames:
-        if first_word_count[words[0]] > 1:
-            # If the first word is not unique, use at least two words
-            for i in range(2, len(words) + 1):
-                candidate_filename = '_'.join(words[:i])
-                if candidate_filename not in pruned_filenames:
-                    pruned_filenames.append(candidate_filename)
-                    break
-        else:
-            # If the first word is unique, use only one word
-            pruned_filenames.append(words[0])
-
-    return pruned_filenames
 
 def safe_eval(expr):
     """
@@ -170,12 +153,11 @@ def write_config_to_yaml(configs, wordlist, basename_without_suffix):
       else:
         raise
 
-  pruned_filenames = prune_filenames([words for _, words in all_filenames])
+  pruned_filenames = ['_'.join(words[:4]) for _, words in all_filenames]
 
   is_first_iteration = True
   for (single_config, _), wordhash in zip(all_filenames, pruned_filenames):
-    hostname = socket.gethostname()
-    single_config["db_path"] = f"computed/{hostname}/{basename_without_suffix}/{wordhash}.db"
+    # pruned filenames NOT IN USE right now
     stream = io.StringIO()
     yaml.dump(single_config, stream)
     yaml_content = stream.getvalue()
