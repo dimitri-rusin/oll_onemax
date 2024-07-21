@@ -8,6 +8,10 @@
 
 
 
+cancel a job
+```sh
+scancel $jobid
+```
 
 ```sh
 
