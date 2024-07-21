@@ -102,7 +102,7 @@ def merged_database(db_paths, new_db_path):
           copy_and_extend_table(conn, new_conn, table, db_path_value)
 
   except sqlite3.Error as e:
-    print(f"SQLite error: {e}")
+    print(f"SQLite error (with {db_path_value}): {e}")
   finally:
     # Close the connections
     for conn in connections:
@@ -115,14 +115,11 @@ def merged_database(db_paths, new_db_path):
 
 
 if __name__ == '__main__':
+  folder_path = '/home/dimitri/code/oll_onemax/computed/fire'
   db_paths = [
-    '/home/dimitri/code/oll_onemax/computed/fire/corral.db',
-    '/home/dimitri/code/oll_onemax/computed/fire/dotted.db',
-    '/home/dimitri/code/oll_onemax/computed/fire/education.db',
-    '/home/dimitri/code/oll_onemax/computed/fire/gracious.db',
-    '/home/dimitri/code/oll_onemax/computed/fire/granular.db',
-    '/home/dimitri/code/oll_onemax/computed/fire/ransack.db',
-    '/home/dimitri/code/oll_onemax/computed/fire/recoil.db',
+    os.path.join(folder_path, f)
+    for f in os.listdir(folder_path)
+    if f.endswith('.db') and f != '_merged.db'
   ]
 
-  merged_database(db_paths, '/home/dimitri/code/oll_onemax/computed/fire/_merged.db')
+  merged_database(db_paths, os.path.join(folder_path, '_merged.db'))

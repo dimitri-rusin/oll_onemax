@@ -1,6 +1,6 @@
 ./dacbench
 colored==2.2.3
-dash==2.16.1
+dash==2.17.1
 gymnasium==0.29.1
 gymnasium[classic-control]
 inspectify==0.0.2
