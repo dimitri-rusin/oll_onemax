@@ -15,6 +15,11 @@ def represent_list(dumper, data):
 def represent_int(dumper, data):
   return dumper.represent_scalar("tag:yaml.org,2002:int", pretty_print_int(data))
 
+def represent_str(dumper, data):
+  if ':' in data:
+    return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='"')
+  return dumper.represent_scalar('tag:yaml.org,2002:str', data)
+
 def pretty_print_int(n):
   return re.sub(r"(?!^)(?=(?:...)+$)", "_", str(n))
 
@@ -124,6 +129,7 @@ def write_config_to_yaml(configs, wordlist, basename_without_suffix):
   yaml.preserve_quotes = True
   yaml.representer.add_representer(int, represent_int)
   yaml.representer.add_representer(list, represent_list)
+  yaml.representer.add_representer(str, represent_str)
 
   all_filenames = []
 
