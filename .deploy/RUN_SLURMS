@@ -14,4 +14,4 @@ fi
 
 config_folder_path="$1"
 
-find config/$config_folder_path/ -name '*.yaml' -print0 | xargs -0 -I {} .deploy/RUN_SLURM {}
+find $config_folder_path -name '*.yaml' -print0 | xargs -0 -I {} .deploy/RUN_SLURM {}
