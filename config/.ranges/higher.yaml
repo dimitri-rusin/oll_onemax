@@ -1,6 +1,6 @@
 - dimensionality: [100]
   lambdas: [[1, 2, 4, 8, 16, 32]]
-  max_training_timesteps: [2_000]
+  max_training_timesteps: [2_000_000]
   num_environments: [1]
   num_evaluation_episodes: [500]
   num_timesteps_per_evaluation: [2_048]
@@ -28,14 +28,14 @@
     partition: [standard]
     qos: [standard]
     time: ["10:45:00"]
-  closeness_to_optimum: [0.85, 0.5]
+  closeness_to_optimum: [0.5, 0.85]
   random_seed: "list(range(100, 103))"
   reward_type: [EVALUATIONS_PLUS_FITNESS]
   state_type: [ONE_HOT_ENCODED]
 
 - dimensionality: [200]
   lambdas: [[1, 2, 4, 8, 16, 32, 64]]
-  max_training_timesteps: [2_000]
+  max_training_timesteps: [2_000_000]
   num_environments: [1]
   num_evaluation_episodes: [500]
   num_timesteps_per_evaluation: [2_048]
@@ -70,7 +70,7 @@
 
 - dimensionality: [500]
   lambdas: [[1, 2, 4, 8, 16, 32, 64, 128]]
-  max_training_timesteps: [2_000]
+  max_training_timesteps: [2_000_000]
   num_environments: [1]
   num_evaluation_episodes: [500]
   num_timesteps_per_evaluation: [2_048]

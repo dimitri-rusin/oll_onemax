@@ -49,18 +49,26 @@ case $command in
     ensure_path "$path" "slurm"
     .deploy/RUN_SLURM "$path" "$verbose"
     ;;
+  slurms)
+    ensure_path "$path" "slurm"
+    .deploy/RUN_SLURMS "$path" "$verbose"
+    ;;
   clean)
     rm -rf slurm-*.out
     git checkout .
     ;;
   pull)
     # git remote rename origin github
-    git checkout main
-    git pull github main
+    git checkout smac
+    git pull github smac
     git submodule update
     ;;
   monitor)
     .deploy/RUN_MONITOR
+    ;;
+  cancel)
+    job_id=$path
+    scancel $job_id
     ;;
   build)
     .deploy/BUILD_PYTHON
