@@ -333,9 +333,8 @@ def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration
       wordlist = [line.strip().split()[1] for line in file]
 
     filename_prefix = generate_filename_from_config(config, wordlist)
-    hostname = socket.gethostname()
     current_date = datetime.datetime.now().strftime("%Y-%B-%d___%H:%M:%S")
-    config['database_path'] = f"computed/{hostname}/{current_date}/{filename_prefix}.db"
+    config['database_path'] = f"computed/{current_date}/{filename_prefix}.db"
     print(config['database_path'])
     breakpoint()
 
