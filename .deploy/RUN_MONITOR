@@ -9,4 +9,4 @@ export PS4='+ \e[36m${BASH_SOURCE}:${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}(): }
 # Enable debugging
 set -x
 
-sacct --account=ec262-dimitri --format=JobID,JobName,State,Start,End,Elapsed
+sacct --account=ec262-dimitri --format=JobID,JobName,State,Start,End,Elapsed | grep -vE 'ext\+|bat\+'
