@@ -28,7 +28,6 @@ def load_wordlist(filename):
     return [line.strip().split()[1] for line in file]
 
 def generate_filename_from_config(single_config, wordlist):
-  # This "default_flow_style=None" makes sure that we get lists with "[]" rather than with "-". Because "-" creates new lines and we want to keep it concise.
 
   def sort_dict_alphabetically(d):
     if not isinstance(d, dict):
@@ -38,7 +37,7 @@ def generate_filename_from_config(single_config, wordlist):
   sorted_config = sort_dict_alphabetically(single_config)
   config_str = str(sorted_config)
 
-  max_words = 16 # because we have 32 bytes and we use 2 bytes to find one word in the downloaded word list, so 16 words at max
+  max_words = 16
   digest = hashlib.sha256(config_str.encode()).hexdigest()
   words = []
   for i in range(0, max_words * 4, 4):
@@ -163,14 +162,12 @@ def write_config_to_yaml(configs, wordlist, basename_without_suffix):
 
   is_first_iteration = True
   for (single_config, _), wordhash in zip(all_filenames, pruned_filenames):
-    # pruned filenames NOT IN USE right now
     stream = io.StringIO()
     yaml.dump(single_config, stream)
     yaml_content = stream.getvalue()
 
-    config_path = f"config/{basename_without_suffix}/{wordhash}.db"
+    config_path = f"config/{basename_without_suffix}/{wordhash}.yaml"
     config_path = config_path.replace("computed", "config")
-    config_path = config_path.replace(".db", ".yaml")
     path_parts = os.path.split(config_path)
     directory_path = path_parts[0]
     if is_first_iteration:
