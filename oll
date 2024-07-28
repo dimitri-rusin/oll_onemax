@@ -50,7 +50,7 @@ case $command in
     .deploy/RUN_SLURM "$path" "$verbose"
     ;;
   slurms)
-    ensure_path "$path" "slurm"
+    ensure_path "$path" "slurms"
     .deploy/RUN_SLURMS "$path" "$verbose"
     ;;
   clean)
