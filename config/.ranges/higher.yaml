@@ -1,6 +1,6 @@
 - dimensionality: [100]
   lambdas: [[1, 2, 4, 8, 16, 32]]
-  max_training_timesteps: [2_000_000]
+  max_training_timesteps: [6_000_000]
   num_environments: [1]
   num_evaluation_episodes: [500]
   num_timesteps_per_evaluation: [2_048]
@@ -35,7 +35,7 @@
 
 - dimensionality: [200]
   lambdas: [[1, 2, 4, 8, 16, 32, 64]]
-  max_training_timesteps: [2_000_000]
+  max_training_timesteps: [6_000_000]
   num_environments: [1]
   num_evaluation_episodes: [500]
   num_timesteps_per_evaluation: [2_048]
@@ -70,7 +70,7 @@
 
 - dimensionality: [500]
   lambdas: [[1, 2, 4, 8, 16, 32, 64, 128]]
-  max_training_timesteps: [2_000_000]
+  max_training_timesteps: [6_000_000]
   num_environments: [1]
   num_evaluation_episodes: [500]
   num_timesteps_per_evaluation: [2_048]
