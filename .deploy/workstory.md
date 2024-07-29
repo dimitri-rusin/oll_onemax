@@ -2,6 +2,12 @@
 
 
 
+```
+python src/rename.py /home/dimitri/code/oll_onemax/computed/fire/_merged.db --old_column db_path --new_column database_path
+```
+
+
+
 
 
 
