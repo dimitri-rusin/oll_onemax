@@ -123,6 +123,9 @@ class OneMaxOLL(gymnasium.Env):
     if self.reward_type == 'EVALUATIONS_PLUS_FITNESS':
       reward = -num_function_evaluations_of_this_step + (self.current_fitness - prior_fitness)
 
+    # EXPERIMENT: reward scaling
+    reward /= self.dimensionality
+
     terminated = (self.current_fitness == self.dimensionality)
     info = {}
 
@@ -335,8 +338,6 @@ def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration
     filename_prefix = generate_filename_from_config(config, wordlist)
     current_date = datetime.datetime.now().strftime("%Y-%B-%d___%H:%M:%S")
     config['database_path'] = f"computed/{current_date}/{filename_prefix}.db"
-    print(config['database_path'])
-    breakpoint()
 
   mersenne_twister = numpy.random.MT19937(seed)
   main_generator = numpy.random.Generator(mersenne_twister)
