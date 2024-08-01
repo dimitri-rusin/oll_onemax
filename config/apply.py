@@ -8,11 +8,13 @@ def main():
   parser.add_argument('filepath', type=str, help='The path to the file with experiment settings.')
   parser.add_argument('--clean', action='store_true', help='Clean the environment variables instead of setting them')
   args = parser.parse_args()
+  directory_path = os.path.dirname(args.filepath)
 
   try:
     with open(args.filepath) as file:
       config = yaml.safe_load(file)
     filename = os.path.basename(args.filepath)
+    print(f'export OO__CONFIG_PATH=\"{directory_path}\"')
     set_or_unset_env_vars(config, args.clean)
   except FileNotFoundError:
     print(f"Error: '{args.filepath}' does not exist.", file=sys.stderr)

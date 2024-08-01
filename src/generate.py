@@ -337,7 +337,9 @@ def train_oll_based_seeker(ConfigSpace__configuration: ConfigSpace.Configuration
 
     filename_prefix = generate_filename_from_config(config, wordlist)
     current_date = datetime.datetime.now().strftime("%Y-%B-%d___%H:%M:%S")
-    config['database_path'] = f"computed/{current_date}/{filename_prefix}.db"
+
+    computed_path = config['config_path'].replace('config', 'computed')
+    config['database_path'] = os.path.join(computed_path, f"{current_date}/{filename_prefix}.db")
 
   mersenne_twister = numpy.random.MT19937(seed)
   main_generator = numpy.random.Generator(mersenne_twister)

@@ -30,18 +30,18 @@ if [ -d .git ]; then
 fi
 
 # Define the directory for local Miniconda installation
-MINICONDA_DIR=".deploy/miniconda/"
+MINICONDA_DIR=".deploy/Miniconda3/"
 
 # Clean up any previous Conda environment and build targets
 rm -rf $MINICONDA_DIR
 
 # Install Miniconda locally
-curl -o /tmp/miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-py39_24.5.0-0-Linux-x86_64.sh
-bash /tmp/miniconda.sh -b -p $MINICONDA_DIR
-rm /tmp/miniconda.sh
+curl -o /tmp/Miniconda3.sh https://repo.anaconda.com/miniconda/Miniconda3-py39_24.5.0-0-Linux-x86_64.sh
+bash /tmp/Miniconda3.sh -b -p $MINICONDA_DIR
+rm /tmp/Miniconda3.sh
 
 # Initialize conda in the current shell (without modifying any shell configuration files)
-eval "$(.deploy/miniconda/bin/conda shell.bash hook)"
+eval "$(.deploy/Miniconda3/bin/conda shell.bash hook)"
 
 # Activate the base Conda environment
 conda activate base
