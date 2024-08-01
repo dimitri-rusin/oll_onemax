@@ -1,6 +1,12 @@
 
 
 
+```sh
+nohup gunicorn --bind 0.0.0.0:8050 src.viz:server &
+```
+
+
+
 Convert
 ```sh
 jupyter nbconvert --to script src/viz.ipynb
