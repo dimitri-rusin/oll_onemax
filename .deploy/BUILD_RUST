@@ -30,7 +30,7 @@ if [ -d .git ]; then
 fi
 
 # Initialize conda in the current shell (without modifying any shell configuration files)
-eval "$(.deploy/miniconda/bin/conda shell.bash hook)"
+eval "$(.deploy/Miniconda3/bin/conda shell.bash hook)"
 
 # The set envelopment comes from an issue where the Anaconda3 access unset variables. We disable our shell policy (set above) of stopping
 # script execution, when an unset variable is accessed. More info: https://github.com/conda/conda/issues/3200
@@ -42,7 +42,7 @@ set -u
 if ! command -v $HOME/.cargo/bin/cargo &> /dev/null
 then
   echo "Cargo is not installed. Installing Cargo..."
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --yes
   source "$HOME/.cargo/env"
 fi
 
