@@ -2,7 +2,14 @@
 
 
 ```sh
+eval .deploy/Miniconda3/bin/conda "shell.fish" "hook" | source; and conda activate .deploy/conda_environment/
 nohup gunicorn --bind 0.0.0.0:8050 src.viz:server &
+nohup python3 src/viz.py &
+
+
+
+lsof -i :8050
+kill -9 PID
 ```
 
 
