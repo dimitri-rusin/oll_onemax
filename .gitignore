@@ -1,7 +1,8 @@
-!config/*.py
-!config/.ranges/
 **/__pycache__/
 .deploy/conda_environment/
 .deploy/Miniconda3/
 computed/
 config/*
+
+!config/*.py
+!config/.ranges/
